@@ -22,7 +22,7 @@ interface CategoryApi {
     fun getCategories() : Call<List<CategoryResponse>>
 
     @POST("category")
-    fun createCategory(@Body request: CreateCategoryRequest) : Call<CategoryResponse>
+    suspend fun createCategory(@Body request: CreateCategoryRequest) : CategoryResponse
 
     @POST("category/image")
     fun uploadImage(@Part image: MultipartBody.Part) : Call<ImageIdResponse>
@@ -43,7 +43,7 @@ interface CategoryApi {
     fun uploadCardImage(@Part image: MultipartBody.Part) : Call<ImageIdResponse>
 
     @GET("card/image/{id}")
-    fun getCardImage(@Path("id") id: String) : Call<ImageResponse>
+    suspend fun getCardImage(@Path("id") id: String) : ImageResponse
 
     @POST("category/{id}/card")
     fun createCard(@Path("id") id: String, @Body request: CreateCardRequest) : Call<CardResponse>

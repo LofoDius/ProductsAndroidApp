@@ -1,30 +1,30 @@
 package lofod.products
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
-import android.util.Log
+import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,33 +32,53 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults.textFieldColors
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Modifier
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import lofod.products.api.RetrofitInstance
@@ -77,25 +97,58 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MainScreen()
+            var category by remember { mutableStateOf<CategoryResponse?>(null) }
+            val categoryApi = RetrofitInstance.categoryApi
+
+            LaunchedEffect("apiCall") {
+                coroutineScope {
+                    categoryApi.getCategories().enqueue(object : Callback<List<CategoryResponse>> {
+                        override fun onResponse(
+                            call: Call<List<CategoryResponse>?>,
+                            response: Response<List<CategoryResponse>?>
+                        ) {
+                            category = CategoryResponse(
+                                name = "Все категории",
+                                categoryId = "-1",
+                                parentId = null,
+                                subcategoriesAmount = 0,
+                                cardsAmount = 0,
+                                subcategories = response.body()!!,
+                                imageId = null
+                            )
+                        }
+
+                        override fun onFailure(
+                            call: Call<List<CategoryResponse>?>,
+                            t: Throwable
+                        ) {
+                        }
+                    })
+                }
+            }
+
+            if (category != null)
+                MainScreen(category!!)
+            else
+                CircularProgressIndicator()
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Preview
 @Composable
-fun MainScreen() {
+fun MainScreen(category: CategoryResponse) {
     var cards by remember { mutableStateOf(emptyList<CardResponse>()) }
     var searchCards by remember { mutableStateOf(emptyList<CardResponse>()) }
     var isSearching by remember { mutableStateOf(false) }
     var isEditCategoryMode by remember { mutableStateOf(false) }
     var editCategoryId: String? = null
-    var categories by remember { mutableStateOf<List<CategoryResponse>?>(null) }
+    var category by remember { mutableStateOf<CategoryResponse?>(category) }
 
     val coroutineScope = rememberCoroutineScope()
     val categoryApi = RetrofitInstance.categoryApi
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Open)
 
     fun getCards(categoryId: String) {
         categoryApi.getCategoryCards(categoryId).enqueue(object : Callback<List<CardResponse>> {
@@ -116,16 +169,27 @@ fun MainScreen() {
         })
     }
 
-    fun getCategories(parentId: String?) {
+    fun getCategory(categoryId: String?) {
         coroutineScope.launch {
             categoryApi.getCategories().enqueue(object : Callback<List<CategoryResponse>> {
                 override fun onResponse(
                     call: Call<List<CategoryResponse>?>,
                     response: Response<List<CategoryResponse>?>
                 ) {
-                    categories = getCategoriesByParentId(parentId, response.body()!!)
-                    if (parentId != null)
-                        getCards(parentId)
+                    if (categoryId == null) {
+                        category = CategoryResponse(
+                            name = "Все категории",
+                            categoryId = "-1",
+                            parentId = null,
+                            subcategoriesAmount = 0,
+                            cardsAmount = 0,
+                            subcategories = response.body()!!,
+                            imageId = null
+                        )
+                    } else {
+                        category = findCategoryById(categoryId, response.body()!!)
+                        getCards(categoryId)
+                    }
                 }
 
                 override fun onFailure(
@@ -139,39 +203,100 @@ fun MainScreen() {
         }
     }
 
-    LaunchedEffect("apiCall") {
-        getCategories(null)
-    }
-
     ProductsTheme {
-        Column {
-            SearchableTopAppBar(
-                categories = emptyList(),
-                onCategoryEdit = { isEditCategoryMode = true; editCategoryId = it },
-                onCategoryChoose = {
-                    getCategories(it)
-                },
-                onOpenSearch = { isSearching = true },
-                onCloseSearch = { isSearching = false },
-                onSearch = { searchText ->
-                    println("searchText: $searchText")
-                },
-            )
+        ModalNavigationDrawer(
+            drawerContent = {
+                ModalDrawerSheet(modifier = Modifier.fillMaxHeight()) {
+                    Spacer(
+                        Modifier
+                            .height(Dp(8f))
+                            .fillMaxWidth()
+                    )
+                    Text(
+                        text = "Выберите категорию",
+                        fontSize = TextUnit(20f, TextUnitType.Sp),
+                    )
+                    HorizontalDivider()
+                    if (category?.parentId != null || category?.categoryId != "-1") {
+                        NavigationDrawerItem(
+                            label = { Text(text = "Назад") },
+                            selected = false,
+                            onClick = {
+                                getCategory(category!!.parentId)
+                            }
+                        )
+                    }
+                    if (category?.subcategories?.isNotEmpty() == true) {
+                        category!!.subcategories.forEach {
+                            NavigationDrawerItem(
+                                label = {
+                                    CategoryView(it, onCategoryEdit = {
+                                        isEditCategoryMode = true
+                                        editCategoryId = it
+                                    })
+                                },
+                                selected = false,
+                                onClick = {
+                                    getCategory(it.categoryId)
+                                }
+                            )
+                        }
+                    } else {
+                        Text("У этой категории нет подкатегорий")
+                    }
 
-            if (cards.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    items(cards) { card ->
-                        CardView(card = card)
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                drawerState.close()
+                                isEditCategoryMode = true
+                                editCategoryId = null
+                            }
+                        }
+                    ) {
+                        Text("Добавить категорию")
                     }
                 }
-            } else {
-                Text(
-                    text = "Выберите категорию в боковом меню"
-                )
+            },
+            drawerState = drawerState,
+        ) {
+            Scaffold(
+                topBar = {
+                    SearchableTopAppBar(
+                        navigationDrawerState = drawerState,
+                        onOpenSearch = { isSearching = true },
+                        onCloseSearch = { isSearching = false },
+                        onSearch = { searchText ->
+                            println("searchText: $searchText")
+                        },
+                    )
+                }
+            ) { innerPadding ->
+                if (cards.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        items(cards) { card ->
+                            CardView(card = card)
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Выберите категорию в боковом меню",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    )
+                }
+//
+//                if (isEditCategoryMode) {
+//
+//                }
             }
         }
     }
@@ -180,19 +305,18 @@ fun MainScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchableTopAppBar(
-    categories: List<CategoryResponse>,
-    onCategoryChoose: (String?) -> Unit,
-    onCategoryEdit: (String) -> Unit,
+    navigationDrawerState: DrawerState,
     onOpenSearch: () -> Unit,
     onCloseSearch: () -> Unit,
     onSearch: (String) -> Unit
 ) {
     var isSearchActive by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
-    var isNavigationOpen by remember { mutableStateOf(false) }
+
 
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     CenterAlignedTopAppBar(
         colors = topAppBarColors(
@@ -267,73 +391,26 @@ fun SearchableTopAppBar(
             }
         },
         navigationIcon = {
-            AnimatedContent(
-                targetState = isNavigationOpen,
-                transitionSpec = {
-                    slideInVertically(
-                        animationSpec = tween(250),
-                        initialOffsetY = { -400 }
-                    ) togetherWith slideOutVertically(animationSpec = tween(100)) + fadeOut(tween(100))
-                },
-                label = "Строка поиска"
-            ) {
-                if (it) {
-                    DropdownMenu(
-                        expanded = isNavigationOpen,
-                        onDismissRequest = { isNavigationOpen = false },
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        CategoryNavigator(
-                            categories = categories,
-                            onCategoryChoose = onCategoryChoose,
-                            onCategoryEdit = onCategoryEdit
-                        )
-                    }
-                } else {
-                    IconButton(onClick = { isNavigationOpen = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.Menu,
-                            contentDescription = "Список категорий"
-                        )
+            IconButton(onClick = {
+                coroutineScope.launch {
+                    navigationDrawerState.apply {
+                        if (isOpen) close() else open()
                     }
                 }
+            }) {
+                Icon(
+                    imageVector = Icons.Filled.Menu,
+                    contentDescription = "Список категорий"
+                )
             }
         },
     )
 }
 
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoryNavigator(
-    categories: List<CategoryResponse>,
-    onCategoryChoose: (String) -> Unit,
-    onCategoryEdit: (String) -> Unit
-) {
-
+fun CategoryView(category: CategoryResponse, onCategoryEdit: (String) -> Unit) {
     ProductsTheme {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            items(categories) { category ->
-                CategoryView(
-                    category = category,
-                    onCategoryEdit = onCategoryEdit,
-                    onCategoryChoose = onCategoryChoose
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CategoryView(category: CategoryResponse, onCategoryEdit: (String) -> Unit, onCategoryChoose: (String) -> Unit) {
-    ProductsTheme {
-        Row(modifier = Modifier.clickable(
-            enabled = true,
-            onClick = { onCategoryChoose(category.categoryId) }
-        )) {
+        Row {
             Text(text = category.name)
             IconButton(onClick = { onCategoryEdit(category.categoryId) }) {
                 Icon(Icons.Filled.Create, contentDescription = "Редактировать")
@@ -344,31 +421,85 @@ fun CategoryView(category: CategoryResponse, onCategoryEdit: (String) -> Unit, o
 
 @Composable
 fun CardView(card: CardResponse) {
-    ProductsTheme {
-        Column {
+    val maxImageHeight = 160.dp
+    val placeholder = ImageBitmap.imageResource(R.drawable.placeholder)
+    var image by remember { mutableStateOf<ImageBitmap>(placeholder) }
+
+    val coroutineScope = rememberCoroutineScope()
+    LaunchedEffect("apiCall") {
+        coroutineScope.launch {
+            card.imageId?.let {
+                val base64Image = RetrofitInstance.categoryApi.getCardImage(card.imageId).image
+                val byteArray = Base64.decode(base64Image, Base64.DEFAULT)
+                image = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+                    .asImageBitmap()
+            }
+        }
+    }
+
+    ElevatedCard(
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp, 8.dp)
+        ) {
+            Image(
+                bitmap = if (card.imageId != null) image else placeholder,
+                contentDescription = "Картинка карточки",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(
+                        if (image.height > maxImageHeight.value.toInt())
+                            maxImageHeight
+                        else
+                            image.height.dp
+                    )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(text = card.name)
-            Row {
-                Text(text = mapPriceLevel(card.priceLevel))
-                Text(text = mapQualityLevel(card.qualityLevel))
+            HorizontalDivider()
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Стоимость: ${mapPriceLevel(card.priceLevel)}")
+                VerticalDivider()
+                Text("Качество: ${mapQualityLevel(card.qualityLevel)}")
             }
         }
     }
 }
 
-fun getCategoriesByParentId(parentId: String?, categories: List<CategoryResponse>): List<CategoryResponse> {
-    return if (parentId == null) {
-        categories
-    } else {
-        findParentByCategoryId(parentId, categories)?.subcategories ?: emptyList()
+@Composable
+fun EditCategoryDialog(categoryId: String?, onConfirmation: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+//                if (categoryId != null)
+
+            }
+        }
     }
 }
 
-fun findParentByCategoryId(categoryId: String, categories: List<CategoryResponse>): CategoryResponse? {
+fun findCategoryById(categoryId: String, categories: List<CategoryResponse>): CategoryResponse? {
     categories.forEach {
-        return if (it.categoryId == categoryId) {
-            it
-        } else {
-            findParentByCategoryId(categoryId, categories)
+        if (it.categoryId == categoryId) {
+            return it
+        } else if (it.subcategories.isNotEmpty()) {
+            return findCategoryById(categoryId, it.subcategories)
         }
     }
 
@@ -390,3 +521,4 @@ fun mapQualityLevel(qualityLevel: QualityLevel): String {
         QualityLevel.HIGH_QUALITY -> "Лухари"
     }
 }
+
