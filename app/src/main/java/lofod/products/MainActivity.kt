@@ -285,8 +285,7 @@ fun MainScreen(category: CategoryResponse) {
                                 coroutineScope.launch {
                                     drawerState.close()
                                     isEditCategoryMode = true
-                                    editCategory =
-                                        CategoryResponse("", "-1", category?.categoryId, 0, 0, emptyList(), null)
+                                    editCategory = null
                                 }
                             },
                             modifier = Modifier

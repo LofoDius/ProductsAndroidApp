@@ -121,7 +121,7 @@ fun CreateCategoryView(
                             enabled = true
                         )
                 ) {
-                    Text(text = if (category?.categoryId != "-1") "Редактирование категории" else "Добавление категории")
+                    Text(text = if (category != null) "Редактирование категории" else "Добавление категории")
                     Spacer(modifier = Modifier.height(16.dp))
                     Row {
                         Text(text = "Название:")
@@ -204,8 +204,8 @@ fun CreateCategoryView(
                                         imageId = imageId ?: category?.imageId
                                     )
                                     val response = withContext(Dispatchers.IO) {
-                                        if (category?.categoryId != "-1")
-                                            categoryApi.updateCategory(category!!.categoryId, createCategoryRequest)
+                                        if (category != null)
+                                            categoryApi.updateCategory(category.categoryId, createCategoryRequest)
                                                 .execute()
                                         else categoryApi.createCategory(createCategoryRequest)
                                     }
