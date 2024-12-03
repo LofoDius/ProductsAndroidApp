@@ -1,5 +1,6 @@
 [versions]
 agp = "8.7.2"
+coilCompose = "3.0.4"
 converterGson = "2.9.0"
 converterScalars = "2.9.0"
 glideTransformations = "4.3.0"
@@ -18,6 +19,7 @@ retrofit = "2.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coilCompose" }
 converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "converterGson" }
 glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 glide-transformations = { module = "jp.wasabeef:glide-transformations", version.ref = "glideTransformations" }

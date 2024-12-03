@@ -25,7 +25,7 @@ android {
         minSdk = 31
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -77,7 +77,6 @@ dependencies {
     implementation(libs.logging.interceptor)
     implementation(libs.retrofit2.converter.scalars)
 
-    // Glide (Image Processing)
-    implementation(libs.glide)
-    implementation(libs.glide.transformations)
+    // Coil
+    implementation(libs.coil.compose)
 }

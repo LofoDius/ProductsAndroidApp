@@ -1,5 +1,6 @@
 package lofod.products
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Base64
@@ -7,12 +8,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,12 +26,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Menu
@@ -42,6 +49,7 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults.textFieldColors
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +59,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.material3.VerticalDivider
@@ -66,8 +75,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.input.ImeAction
@@ -82,14 +94,17 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import lofod.products.api.RetrofitInstance
-import lofod.products.api.model.PriceLevel
-import lofod.products.api.model.QualityLevel
+import lofod.products.api.request.CreateSessionRequest
 import lofod.products.api.response.CardResponse
 import lofod.products.api.response.CategoryResponse
 import lofod.products.ui.theme.ProductsTheme
+import lofod.products.view.CreateCardView
+import lofod.products.view.CreateCategoryView
 import retrofit2.Call
 import retrofit2.Callback
+import retrofit2.HttpException
 import retrofit2.Response
+import java.io.IOException
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -102,28 +117,31 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect("apiCall") {
                 coroutineScope {
-                    categoryApi.getCategories().enqueue(object : Callback<List<CategoryResponse>> {
-                        override fun onResponse(
-                            call: Call<List<CategoryResponse>?>,
-                            response: Response<List<CategoryResponse>?>
-                        ) {
-                            category = CategoryResponse(
-                                name = "Все категории",
-                                categoryId = "-1",
-                                parentId = null,
-                                subcategoriesAmount = 0,
-                                cardsAmount = 0,
-                                subcategories = response.body()!!,
-                                imageId = null
-                            )
-                        }
+                    category = CategoryResponse(
+                        name = "Все категории",
+                        categoryId = "-1",
+                        parentId = null,
+                        subcategoriesAmount = 0,
+                        cardsAmount = 0,
+                        subcategories = categoryApi.getCategories(),
+                        imageId = null
+                    )
 
-                        override fun onFailure(
-                            call: Call<List<CategoryResponse>?>,
-                            t: Throwable
-                        ) {
-                        }
-                    })
+                    RetrofitInstance.authApi.createSession(CreateSessionRequest("1231"))
+                        .enqueue(object : Callback<Void> {
+                            override fun onResponse(
+                                call: Call<Void?>,
+                                response: Response<Void?>
+                            ) {
+                                if (response.code() == 201)
+                                    Storage.token = response.headers()["Authorization"]
+                            }
+
+                            override fun onFailure(call: Call<Void?>, t: Throwable) {
+
+                            }
+
+                        })
                 }
             }
 
@@ -138,17 +156,28 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(category: CategoryResponse) {
+    var isLoading by remember { mutableStateOf(false) }
     var cards by remember { mutableStateOf(emptyList<CardResponse>()) }
+    var category by remember { mutableStateOf<CategoryResponse?>(category) }
+    var isShowDeleteCategoryDialog by remember { mutableStateOf(false) }
+
     var searchCards by remember { mutableStateOf(emptyList<CardResponse>()) }
     var isSearching by remember { mutableStateOf(false) }
+
     var isEditCategoryMode by remember { mutableStateOf(false) }
-    var editCategoryId: String? = null
-    var category by remember { mutableStateOf<CategoryResponse?>(category) }
+    var editCategory: CategoryResponse? = null
+
+    var isEditCardMode by remember { mutableStateOf(false) }
+    var editCard: CardResponse? = null
+
+    var isShowDeleteCardDialog by remember { mutableStateOf(false) }
+    var cardToDelete: CardResponse? = null
 
     val coroutineScope = rememberCoroutineScope()
     val categoryApi = RetrofitInstance.categoryApi
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Open)
+    val drawerWidth = LocalConfiguration.current.screenWidthDp * 0.8
 
     fun getCards(categoryId: String) {
         categoryApi.getCategoryCards(categoryId).enqueue(object : Callback<List<CardResponse>> {
@@ -171,42 +200,32 @@ fun MainScreen(category: CategoryResponse) {
 
     fun getCategory(categoryId: String?) {
         coroutineScope.launch {
-            categoryApi.getCategories().enqueue(object : Callback<List<CategoryResponse>> {
-                override fun onResponse(
-                    call: Call<List<CategoryResponse>?>,
-                    response: Response<List<CategoryResponse>?>
-                ) {
-                    if (categoryId == null) {
-                        category = CategoryResponse(
-                            name = "Все категории",
-                            categoryId = "-1",
-                            parentId = null,
-                            subcategoriesAmount = 0,
-                            cardsAmount = 0,
-                            subcategories = response.body()!!,
-                            imageId = null
-                        )
-                    } else {
-                        category = findCategoryById(categoryId, response.body()!!)
-                        getCards(categoryId)
-                    }
-                }
-
-                override fun onFailure(
-                    call: Call<List<CategoryResponse>?>,
-                    t: Throwable
-                ) {
-
-                }
-
-            })
+            val categories = categoryApi.getCategories()
+            if (categoryId == null) {
+                category = CategoryResponse(
+                    name = "Все категории",
+                    categoryId = "-1",
+                    parentId = null,
+                    subcategoriesAmount = 0,
+                    cardsAmount = 0,
+                    subcategories = categories,
+                    imageId = null
+                )
+            } else {
+                category = findCategoryById(categoryId, categories)
+                getCards(categoryId)
+            }
         }
     }
 
     ProductsTheme {
         ModalNavigationDrawer(
             drawerContent = {
-                ModalDrawerSheet(modifier = Modifier.fillMaxHeight()) {
+                ModalDrawerSheet(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .requiredWidth(drawerWidth.dp)
+                ) {
                     Spacer(
                         Modifier
                             .height(Dp(8f))
@@ -222,7 +241,9 @@ fun MainScreen(category: CategoryResponse) {
                             label = { Text(text = "Назад") },
                             selected = false,
                             onClick = {
-                                getCategory(category!!.parentId)
+                                isLoading = true
+                                getCategory(category?.parentId)
+                                isLoading = false
                             }
                         )
                     }
@@ -232,12 +253,14 @@ fun MainScreen(category: CategoryResponse) {
                                 label = {
                                     CategoryView(it, onCategoryEdit = {
                                         isEditCategoryMode = true
-                                        editCategoryId = it
+                                        editCategory = it
                                     })
                                 },
                                 selected = false,
                                 onClick = {
+                                    isLoading = true
                                     getCategory(it.categoryId)
+                                    isLoading = false
                                 }
                             )
                         }
@@ -247,16 +270,40 @@ fun MainScreen(category: CategoryResponse) {
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                drawerState.close()
-                                isEditCategoryMode = true
-                                editCategoryId = null
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                    isEditCategoryMode = true
+                                    editCategory =
+                                        CategoryResponse("", "-1", category?.categoryId, 0, 0, emptyList(), null)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp, 4.dp)
+                        ) {
+                            Text("Добавить категорию")
+                        }
+
+                        if (category?.categoryId != "-1") {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        drawerState.close()
+                                        isShowDeleteCategoryDialog = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp, 4.dp)
+                            ) {
+                                Text("Удалить эту категорию")
                             }
                         }
-                    ) {
-                        Text("Добавить категорию")
                     }
                 }
             },
@@ -269,12 +316,65 @@ fun MainScreen(category: CategoryResponse) {
                         onOpenSearch = { isSearching = true },
                         onCloseSearch = { isSearching = false },
                         onSearch = { searchText ->
-                            println("searchText: $searchText")
+                            coroutineScope.launch {
+                                categoryApi.search(searchText).enqueue(object : Callback<List<CardResponse>> {
+                                    override fun onResponse(
+                                        call: Call<List<CardResponse>?>,
+                                        response: Response<List<CardResponse>?>
+                                    ) {
+                                        if (response.isSuccessful) {
+                                            searchCards = response.body()!!
+                                        } else {
+                                            handleApiError(HttpException(response))
+                                        }
+                                    }
+
+                                    override fun onFailure(
+                                        call: Call<List<CardResponse>?>,
+                                        t: Throwable
+                                    ) {
+
+                                    }
+                                })
+                            }
                         },
                     )
+                },
+                floatingActionButton = {
+                    FloatingActionButton(onClick = {
+                        isEditCardMode = true
+                        editCard = null
+                    }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Добавить категорию")
+                    }
                 }
             ) { innerPadding ->
-                if (cards.isNotEmpty()) {
+                if (isSearching) {
+                    if (searchCards.isEmpty())
+                        Text(text = "Ничего не найдено")
+                    else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            items(searchCards) { card ->
+                                CardView(
+                                    card = card,
+                                    onCardEdit = {
+                                        editCard = it
+                                        isEditCardMode = true
+                                    },
+                                    onCardDelete = {
+                                        cardToDelete = it
+                                        isShowDeleteCardDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else if (cards.isNotEmpty()) {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
@@ -282,21 +382,211 @@ fun MainScreen(category: CategoryResponse) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         items(cards) { card ->
-                            CardView(card = card)
+                            CardView(
+                                card = card,
+                                onCardEdit = {
+                                    editCard = it
+                                    isEditCardMode = true
+                                },
+                                onCardDelete = {
+                                    cardToDelete = it
+                                    isShowDeleteCardDialog = true
+                                }
+                            )
                         }
                     }
                 } else {
-                    Text(
-                        text = "Выберите категорию в боковом меню",
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
+                    ) {
+                        Text(
+                            text = if (category?.categoryId == "-1") "Выберите категорию в боковом меню"
+                            else "Карточек нет",
+                        )
+                    }
+                }
+
+                // Диалог редактирования категории
+                if (isEditCategoryMode) {
+                    CreateCategoryView(
+                        category = editCategory,
+                        onConfirmation = {
+                            coroutineScope.launch {
+                                val categories = categoryApi.getCategories()
+                                if (category?.categoryId == "-1") {
+                                    category = CategoryResponse(
+                                        name = "Все категории",
+                                        categoryId = "-1",
+                                        parentId = null,
+                                        subcategoriesAmount = 0,
+                                        cardsAmount = 0,
+                                        subcategories = categories,
+                                        imageId = null
+                                    )
+                                } else {
+                                    category = findCategoryById(category!!.categoryId, categories)
+                                    getCards(category!!.categoryId)
+                                }
+                                isEditCategoryMode = false
+                            }
+                        },
+                        onDismiss = {
+                            isEditCategoryMode = false
+                        }
                     )
                 }
-//
-//                if (isEditCategoryMode) {
-//
-//                }
+
+                // Диалог редактирования карточки
+                if (isEditCardMode) {
+                    CreateCardView(
+                        category = category!!,
+                        editCard,
+                        onConfirmation = {
+                            cards = it
+                            isEditCardMode = false
+                        },
+                        onDismiss = {
+                            isEditCardMode = false
+                        }
+                    )
+                }
+
+                // Диалог подтверждения удаления карточки
+                if (isShowDeleteCardDialog) {
+                    Dialog(onDismissRequest = { isShowDeleteCardDialog = false }) {
+                        Card(
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    "Удалить карточку?",
+                                    fontSize = TextUnit(24f, TextUnitType.Sp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                categoryApi.deleteCard(cardToDelete!!.categoryId, cardToDelete!!.cardId)
+                                                    .enqueue(object : Callback<Void> {
+                                                        override fun onResponse(
+                                                            call: Call<Void?>,
+                                                            response: Response<Void?>
+                                                        ) {
+                                                            if (response.isSuccessful) {
+                                                                cards = cards.filter { it != cardToDelete }
+                                                                searchCards = searchCards.filter { it != cardToDelete }
+                                                            } else {
+                                                                handleApiError(HttpException(response))
+                                                                getCards(category!!.categoryId)
+                                                            }
+                                                            isShowDeleteCardDialog = false
+                                                        }
+
+                                                        override fun onFailure(
+                                                            call: Call<Void?>,
+                                                            t: Throwable
+                                                        ) {
+                                                            isShowDeleteCardDialog = false
+                                                        }
+                                                    })
+
+                                            }
+                                        }
+                                    ) {
+                                        Text(text = "Да")
+                                    }
+
+                                    TextButton(
+                                        onClick = {
+                                            isShowDeleteCardDialog = false
+                                        }
+                                    ) {
+                                        Text(text = "Нет")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Диалог подтверждения удаления категории
+                if (isShowDeleteCategoryDialog) {
+                    Dialog(onDismissRequest = { isShowDeleteCategoryDialog = false }) {
+                        Card(
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    "Удалить эту категорию?",
+                                    fontSize = TextUnit(24f, TextUnitType.Sp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                categoryApi.deleteCategory(cardToDelete!!.categoryId)
+                                                    .enqueue(object : Callback<String> {
+                                                        override fun onResponse(
+                                                            call: Call<String?>,
+                                                            response: Response<String?>
+                                                        ) {
+                                                            if (response.isSuccessful)
+                                                                getCategory(category!!.parentId)
+                                                            else
+                                                                handleApiError(HttpException(response))
+                                                            isShowDeleteCategoryDialog = false
+                                                        }
+
+                                                        override fun onFailure(
+                                                            call: Call<String?>,
+                                                            t: Throwable
+                                                        ) {
+                                                            isShowDeleteCategoryDialog = false
+                                                        }
+                                                    })
+
+                                            }
+                                        }
+                                    ) {
+                                        Text(text = "Да")
+                                    }
+
+                                    TextButton(
+                                        onClick = {
+                                            isShowDeleteCategoryDialog = false
+                                        }
+                                    ) {
+                                        Text(text = "Нет")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -408,11 +698,42 @@ fun SearchableTopAppBar(
 }
 
 @Composable
-fun CategoryView(category: CategoryResponse, onCategoryEdit: (String) -> Unit) {
+fun CategoryView(category: CategoryResponse, onCategoryEdit: (CategoryResponse) -> Unit) {
+    var image by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect("apiCall") {
+        if (category.imageId != null) {
+            coroutineScope.launch {
+                val base64Image = RetrofitInstance.categoryApi.getCardImage(category.imageId).image
+                val byteArray = Base64.decode(base64Image, Base64.DEFAULT)
+                image = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
+                    .asImageBitmap()
+                    .asAndroidBitmap()
+                    .let {
+                        Bitmap.createScaledBitmap(it, 24, 24, false).asImageBitmap()
+                    }
+            }
+        }
+    }
+
     ProductsTheme {
-        Row {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (image != null) {
+                Image(
+                    bitmap = image!!,
+                    contentDescription = "Картинка категории",
+                    modifier = Modifier
+                        .size(24.dp)
+                        .padding(end = 4.dp)
+                )
+            }
+
             Text(text = category.name)
-            IconButton(onClick = { onCategoryEdit(category.categoryId) }) {
+            IconButton(onClick = { onCategoryEdit(category) }) {
                 Icon(Icons.Filled.Create, contentDescription = "Редактировать")
             }
         }
@@ -420,10 +741,11 @@ fun CategoryView(category: CategoryResponse, onCategoryEdit: (String) -> Unit) {
 }
 
 @Composable
-fun CardView(card: CardResponse) {
+fun CardView(card: CardResponse, onCardEdit: (CardResponse) -> Unit, onCardDelete: (CardResponse) -> Unit) {
     val maxImageHeight = 160.dp
     val placeholder = ImageBitmap.imageResource(R.drawable.placeholder)
     var image by remember { mutableStateOf<ImageBitmap>(placeholder) }
+    var expanded by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     LaunchedEffect("apiCall") {
@@ -442,8 +764,13 @@ fun CardView(card: CardResponse) {
             defaultElevation = 4.dp
         ),
         modifier = Modifier
+            .animateContentSize()
             .fillMaxWidth()
             .padding(8.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { expanded = !expanded }
     ) {
         Column(
             modifier = Modifier.padding(16.dp, 8.dp)
@@ -463,32 +790,49 @@ fun CardView(card: CardResponse) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(text = card.name)
             HorizontalDivider()
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = card.description ?: "Описания нет",
+                    color = if (card.description == null) Color.Gray else Color.Unspecified
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Стоимость: ${mapPriceLevel(card.priceLevel)}")
+                Text("Стоимость: ${card.priceLevel.text()}")
                 VerticalDivider()
-                Text("Качество: ${mapQualityLevel(card.qualityLevel)}")
+                Text("Качество: ${card.qualityLevel.text()}")
             }
-        }
-    }
-}
 
-@Composable
-fun EditCategoryDialog(categoryId: String?, onConfirmation: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-//                if (categoryId != null)
+            if (expanded) {
+                HorizontalDivider()
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp, 4.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            onCardDelete(card)
+                        }
+                    ) {
+                        Text(text = "Удалить")
+                    }
 
+                    TextButton(
+                        onClick = {
+                            onCardEdit(card)
+                        }
+                    ) {
+                        Text(text = "Редактировать")
+                    }
+                }
             }
         }
     }
@@ -506,19 +850,18 @@ fun findCategoryById(categoryId: String, categories: List<CategoryResponse>): Ca
     return null
 }
 
-fun mapPriceLevel(priceLevel: PriceLevel): String {
-    return when (priceLevel) {
-        PriceLevel.LOW_PRICE -> "Дешево"
-        PriceLevel.MEDIUM_PRICE -> "Средненько"
-        PriceLevel.HIGH_PRICE -> "Дорого"
+fun handleApiError(e: Exception) {
+    when (e) {
+        is HttpException -> {
+            println("HTTP ошибка: ${e.code()}, сообщение: ${e.message()}")
+        }
+
+        is IOException -> {
+            println("Сетевая ошибка: ${e.message}")
+        }
+
+        else -> {
+            println("Неизвестная ошибка: ${e.message}")
+        }
     }
 }
-
-fun mapQualityLevel(qualityLevel: QualityLevel): String {
-    return when (qualityLevel) {
-        QualityLevel.LOW_QUALITY -> "Такое себе"
-        QualityLevel.MEDIUM_QUALITY -> "Нормас"
-        QualityLevel.HIGH_QUALITY -> "Лухари"
-    }
-}
-
