@@ -850,7 +850,10 @@ fun findCategoryById(categoryId: String, categories: List<CategoryResponse>): Ca
         if (it.categoryId == categoryId) {
             return it
         } else if (it.subcategories.isNotEmpty()) {
-            return findCategoryById(categoryId, it.subcategories)
+            val foundCategory = findCategoryById(categoryId, it.subcategories)
+            if (foundCategory != null) {
+                return foundCategory
+            }
         }
     }
 
