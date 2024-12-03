@@ -147,8 +147,15 @@ class MainActivity : ComponentActivity() {
 
             if (category != null)
                 MainScreen(category!!)
-            else
-                CircularProgressIndicator()
+            else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
         }
     }
 }
