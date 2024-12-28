@@ -3,6 +3,7 @@ package lofod.products.view
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -12,12 +13,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,7 +56,6 @@ import lofod.products.handleApiError
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import retrofit2.HttpException
 import java.io.InputStream
 import kotlin.collections.forEach
 
@@ -87,7 +84,12 @@ fun CreateCategoryView(
     val categoryApi = RetrofitInstance.categoryApi
 
     val scrollState = rememberScrollState()
-    val context = LocalContext.current.contentResolver
+    val contentResolver = LocalContext.current.contentResolver
+    val context = LocalContext.current
+
+    fun showException(e: Exception) {
+        Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+    }
 
     LaunchedEffect("apiCall") {
         categories = categoryApi.getCategories()
@@ -111,55 +113,45 @@ fun CreateCategoryView(
                 .fillMaxWidth(),
             onClick = { isTreeExpanded = false }
         ) {
-            if (categories.isNotEmpty()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .verticalScroll(
-                            state = scrollState,
-                            enabled = true
-                        )
-                ) {
-                    Text(text = if (category != null) "Редактирование категории" else "Добавление категории")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row {
-                        Text(text = "Название:")
-                        OutlinedTextField(
-                            value = newName,
-                            onValueChange = { newName = it },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(text = "Родительская категория:")
-                    TreeView(
-                        isTreeExpanded,
-                        parentName,
-                        categories,
-                        onExpand = {
-                            isTreeExpanded = true
-                        },
-                        onChoose = {
-                            parentId = it.categoryId
-                            parentName = it.name
-                            isTreeExpanded = false
-                        }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(
+                        state = scrollState,
+                        enabled = true
                     )
+            ) {
+                Text(text = if (category != null) "Редактирование категории" else "Добавление категории")
+                Spacer(modifier = Modifier.height(16.dp))
+                Row {
+                    Text(text = "Название:")
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    image?.let {
-                        AsyncImage(
-                            model = it,
-                            contentDescription = "Картинка категории",
-                            modifier = Modifier
-                                .height(48.dp)
-                                .clickable {
-                                    launcher.launch("image/*")
-                                }
-                        )
-                    } ?: Image(
-                        bitmap = initImage ?: ImageBitmap.imageResource(R.drawable.placeholder),
+                Text(text = "Родительская категория:")
+                TreeView(
+                    isTreeExpanded,
+                    parentName,
+                    categories,
+                    onExpand = {
+                        isTreeExpanded = true
+                    },
+                    onChoose = {
+                        parentId = it.categoryId
+                        parentName = it.name
+                        isTreeExpanded = false
+                    }
+                )
+
+                image?.let {
+                    AsyncImage(
+                        model = it,
                         contentDescription = "Картинка категории",
                         modifier = Modifier
                             .height(48.dp)
@@ -167,69 +159,75 @@ fun CreateCategoryView(
                                 launcher.launch("image/*")
                             }
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row {
-                        Button(onClick = {
-                            coroutineScope.launch {
-                                var imageId: String? = image?.let {
-                                    val inputStream: InputStream? = context.openInputStream(it)
-                                    inputStream?.let {
-                                        val byteArray = it.readBytes()
-                                        it.close()
+                } ?: Image(
+                    bitmap = initImage ?: ImageBitmap.imageResource(R.drawable.placeholder),
+                    contentDescription = "Картинка категории",
+                    modifier = Modifier
+                        .height(48.dp)
+                        .clickable {
+                            launcher.launch("image/*")
+                        }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    Button(onClick = {
+                        coroutineScope.launch {
+                            var multipart = image?.let {
+                                val inputStream: InputStream? = contentResolver.openInputStream(it)
+                                inputStream?.let {
+                                    val byteArray = it.readBytes()
+                                    it.close()
 
-                                        val body = MultipartBody.Part.createFormData(
-                                            "image",
-                                            "image.jpg",
-                                            byteArray.toRequestBody("image/*".toMediaTypeOrNull())
-                                        )
-                                        try {
-                                            val res = categoryApi.uploadImage(body)
-                                            if (res.isSuccessful && res.body()?.imageId != null)
-                                                return@let res.body()?.imageId
-                                            else {
-                                                handleApiError(HttpException(res))
-                                                return@let null
-                                            }
-                                        } catch (e: Exception) {
-                                            handleApiError(e)
-                                            return@let null
-                                        }
-                                    }
-                                }
-
-                                coroutineScope.launch {
-                                    val createCategoryRequest = CreateCategoryRequest(
-                                        parentId = parentId,
-                                        name = newName,
-                                        imageId = imageId ?: category?.imageId
+                                    val body = MultipartBody.Part.createFormData(
+                                        "image",
+                                        "image.jpg",
+                                        byteArray.toRequestBody("image/*".toMediaTypeOrNull())
                                     )
-                                    val response = withContext(Dispatchers.IO) {
-                                        if (category != null)
-                                            categoryApi.updateCategory(category.categoryId, createCategoryRequest)
-                                                .execute()
-                                        else categoryApi.createCategory(createCategoryRequest)
-                                    }
-                                    if (response.isSuccessful)
-                                        onConfirmation(response.body()!!)
-                                    else onDismiss()
+                                    return@let body
                                 }
                             }
-                        }) {
-                            Text(text = "Сохранить")
-                        }
 
-                        Button(onClick = { onDismiss() }) {
-                            Text(text = "Отмена")
+                            val createCategoryRequest = CreateCategoryRequest(
+                                parentId = parentId,
+                                name = newName,
+                                imageId = category?.imageId
+                            )
+                            val response = withContext(Dispatchers.IO) {
+                                if (category != null)
+                                    categoryApi.updateCategory(category.categoryId, createCategoryRequest)
+                                        .execute()
+                                else categoryApi.createCategory(createCategoryRequest)
+                            }
+                            if (response.isSuccessful) {
+                                onConfirmation(response.body()!!)
+                                multipart?.let {
+                                    try {
+                                        val res = categoryApi.uploadImage(multipart)
+                                        if (res.isSuccessful && res.body()?.imageId != null) {
+                                            createCategoryRequest.imageId = res.body()?.imageId
+                                            categoryApi.updateCategory(category!!.categoryId, createCategoryRequest)
+                                                .execute()
+                                        } else {
+                                            handleApiError(Exception(res.raw().body?.string()))
+                                            showException(Exception(res.raw().body?.string()))
+                                        }
+                                    } catch (e: Exception) {
+                                        handleApiError(e)
+                                        showException(e)
+                                    }
+                                }
+                            } else {
+                                showException(Exception(response.raw().body?.string()))
+                                onDismiss()
+                            }
                         }
+                    }) {
+                        Text(text = "Сохранить")
                     }
-                }
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    CircularProgressIndicator()
+
+                    Button(onClick = { onDismiss() }) {
+                        Text(text = "Отмена")
+                    }
                 }
             }
         }

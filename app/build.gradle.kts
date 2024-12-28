@@ -13,7 +13,7 @@ val apiUrl: String = if (localProperties.exists()) {
     properties.load(localProperties.inputStream())
     properties.getProperty("API_URL") ?: "http://10.0.2.2:8080"
 } else {
-    "http://10.0.2.2:80801"
+    "http://10.0.2.2:8080"
 }
 
 android {

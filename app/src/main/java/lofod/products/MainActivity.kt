@@ -102,9 +102,7 @@ import lofod.products.view.CreateCardView
 import lofod.products.view.CreateCategoryView
 import retrofit2.Call
 import retrofit2.Callback
-import retrofit2.HttpException
 import retrofit2.Response
-import java.io.IOException
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -186,6 +184,16 @@ fun MainScreen(category: CategoryResponse) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Open)
     val drawerWidth = LocalConfiguration.current.screenWidthDp * 0.8
 
+    val baseCategory = CategoryResponse(
+        name = "Все категории",
+        categoryId = "-1",
+        parentId = null,
+        subcategoriesAmount = 0,
+        cardsAmount = 0,
+        subcategories = listOf(),
+        imageId = null
+    )
+
     fun getCards(categoryId: String) {
         categoryApi.getCategoryCards(categoryId).enqueue(object : Callback<List<CardResponse>> {
             override fun onResponse(
@@ -209,15 +217,7 @@ fun MainScreen(category: CategoryResponse) {
         coroutineScope.launch {
             val categories = categoryApi.getCategories()
             if (categoryId == null) {
-                category = CategoryResponse(
-                    name = "Все категории",
-                    categoryId = "-1",
-                    parentId = null,
-                    subcategoriesAmount = 0,
-                    cardsAmount = 0,
-                    subcategories = categories,
-                    imageId = null
-                )
+                category = baseCategory.copy(subcategories = categories)
             } else {
                 category = findCategoryById(categoryId, categories)
                 getCards(categoryId)
@@ -239,7 +239,7 @@ fun MainScreen(category: CategoryResponse) {
                             .fillMaxWidth()
                     )
                     Text(
-                        text = "Выберите категорию",
+                        text = if (category?.parentId != null) "Категория: " + category!!.name else "Выберите категорию",
                         fontSize = TextUnit(20f, TextUnitType.Sp),
                     )
                     HorizontalDivider()
@@ -331,7 +331,7 @@ fun MainScreen(category: CategoryResponse) {
                                         if (response.isSuccessful) {
                                             searchCards = response.body()!!
                                         } else {
-                                            handleApiError(HttpException(response))
+                                            handleApiError(Exception(response.raw().body?.string()))
                                         }
                                     }
 
@@ -347,11 +347,13 @@ fun MainScreen(category: CategoryResponse) {
                     )
                 },
                 floatingActionButton = {
-                    FloatingActionButton(onClick = {
-                        isEditCardMode = true
-                        editCard = null
-                    }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Добавить категорию")
+                    if (category?.categoryId != "-1") {
+                        FloatingActionButton(onClick = {
+                            isEditCardMode = true
+                            editCard = null
+                        }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Добавить категорию")
+                        }
                     }
                 }
             ) { innerPadding ->
@@ -424,15 +426,7 @@ fun MainScreen(category: CategoryResponse) {
                             coroutineScope.launch {
                                 val categories = categoryApi.getCategories()
                                 if (category?.categoryId == "-1") {
-                                    category = CategoryResponse(
-                                        name = "Все категории",
-                                        categoryId = "-1",
-                                        parentId = null,
-                                        subcategoriesAmount = 0,
-                                        cardsAmount = 0,
-                                        subcategories = categories,
-                                        imageId = null
-                                    )
+                                    category = baseCategory.copy(subcategories = categories)
                                 } else {
                                     category = findCategoryById(category!!.categoryId, categories)
                                     getCards(category!!.categoryId)
@@ -496,7 +490,7 @@ fun MainScreen(category: CategoryResponse) {
                                                                 cards = cards.filter { it != cardToDelete }
                                                                 searchCards = searchCards.filter { it != cardToDelete }
                                                             } else {
-                                                                handleApiError(HttpException(response))
+                                                                handleApiError(Exception(response.raw().body?.string()))
                                                                 getCards(category!!.categoryId)
                                                             }
                                                             isShowDeleteCardDialog = false
@@ -554,7 +548,7 @@ fun MainScreen(category: CategoryResponse) {
                                     TextButton(
                                         onClick = {
                                             coroutineScope.launch {
-                                                categoryApi.deleteCategory(cardToDelete!!.categoryId)
+                                                categoryApi.deleteCategory(category!!.categoryId)
                                                     .enqueue(object : Callback<String> {
                                                         override fun onResponse(
                                                             call: Call<String?>,
@@ -563,7 +557,7 @@ fun MainScreen(category: CategoryResponse) {
                                                             if (response.isSuccessful)
                                                                 getCategory(category!!.parentId)
                                                             else
-                                                                handleApiError(HttpException(response))
+                                                                handleApiError(Exception(response.raw().body?.string()))
                                                             isShowDeleteCategoryDialog = false
                                                         }
 
@@ -860,17 +854,5 @@ fun findCategoryById(categoryId: String, categories: List<CategoryResponse>): Ca
 }
 
 fun handleApiError(e: Exception) {
-    when (e) {
-        is HttpException -> {
-            println("HTTP ошибка: ${e.code()}, сообщение: ${e.message()}")
-        }
-
-        is IOException -> {
-            println("Сетевая ошибка: ${e.message}")
-        }
-
-        else -> {
-            println("Неизвестная ошибка: ${e.message}")
-        }
-    }
+    println("API ERROR: ${e.message}")
 }
