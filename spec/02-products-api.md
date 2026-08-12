@@ -15,7 +15,7 @@
 | Security | Spring Security + кастомный session filter |
 | Passwords | BCrypt (`BCryptPasswordEncoder`) |
 | Images | Thumbnailator 0.4.20 |
-| Packaging | Fat JAR; Docker `amazoncorretto:21-alpine-jdk` |
+| Packaging | Fat JAR; multi-stage Docker + `docker compose` (see below) |
 
 **Не используется:** JPA, SQL, Flyway/Liquibase, Bean Validation, JWT, OpenAPI/Swagger, shared Password-документ, LiteCategory.
 
@@ -36,6 +36,15 @@ app.session.ttl-days=30
 ```
 
 URI Mongo — из env `SPRING_MONGO_URI`. Auto-index: уникальный `username`, TTL по `Session.expiresAt`.
+
+## Docker / home-server deploy
+
+One-command stack via `docker compose` in the API repo:
+
+- **Dockerfile** (multi-stage): build with `gradle:8.10.2-jdk21-alpine` (`bootJar`), runtime `amazoncorretto:21-alpine-jdk`.
+- **`docker-compose.yml`**: `mongo:7` + `api`; host port `${API_PORT:-18080}` → container `8080`; named volume `mongo_data`; API `depends_on` mongo with healthcheck.
+- **Env**: copy `.env.example` → `.env` (`MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `API_PORT`). Compose sets `SPRING_MONGO_URI` for the API service (authSource=admin, DB `productsDB`).
+
 
 ## Слои
 
