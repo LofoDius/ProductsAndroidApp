@@ -9,7 +9,6 @@ import lofod.products.data.remote.model.CategoryRole
 import lofod.products.data.remote.response.CategoryResponse
 import lofod.products.data.repository.CategoryRepository
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -23,7 +22,7 @@ class CatalogViewModelAclTest {
     private val categoryRepository: CategoryRepository = mockk(relaxed = true)
 
     @Test
-    fun ownerCategory_canOpenMembersAndCreateCard() = runTest(mainDispatcherRule.dispatcher) {
+    fun ownerCategory_canManageMembersAndEditCards() = runTest(mainDispatcherRule.dispatcher) {
         val owner = category(id = "owned", role = CategoryRole.OWNER)
         coEvery { categoryRepository.getCategories() } returns listOf(owner)
         coEvery { categoryRepository.getCategoryCards("owned") } returns emptyList()
@@ -31,16 +30,12 @@ class CatalogViewModelAclTest {
         val viewModel = CatalogViewModel(categoryRepository)
         viewModel.selectCategory(owner)
 
-        viewModel.openMembers()
-        viewModel.openCreateCard()
-
-        assertTrue(viewModel.state.value.showMembers)
-        assertTrue(viewModel.state.value.showCardForm)
-        assertNull(viewModel.state.value.cardFormTarget)
+        assertTrue(viewModel.state.value.currentCategory!!.canEditCards())
+        assertTrue(viewModel.state.value.currentCategory!!.canManageMembers())
     }
 
     @Test
-    fun memberCategory_canCreateCardButNotOpenMembers() = runTest(mainDispatcherRule.dispatcher) {
+    fun memberCategory_canEditCardsButNotManageMembers() = runTest(mainDispatcherRule.dispatcher) {
         val member = category(id = "shared", role = CategoryRole.MEMBER)
         coEvery { categoryRepository.getCategories() } returns listOf(member)
         coEvery { categoryRepository.getCategoryCards("shared") } returns emptyList()
@@ -48,26 +43,19 @@ class CatalogViewModelAclTest {
         val viewModel = CatalogViewModel(categoryRepository)
         viewModel.selectCategory(member)
 
-        viewModel.openMembers()
-        assertFalse(viewModel.state.value.showMembers)
-
-        viewModel.openCreateCard()
-        assertTrue(viewModel.state.value.showCardForm)
+        assertTrue(viewModel.state.value.currentCategory!!.canEditCards())
+        assertFalse(viewModel.state.value.currentCategory!!.canManageMembers())
     }
 
     @Test
-    fun syntheticRoot_blocksCreateCardAndMembers() = runTest(mainDispatcherRule.dispatcher) {
+    fun syntheticRoot_blocksEditCardsAndMembers() = runTest(mainDispatcherRule.dispatcher) {
         coEvery { categoryRepository.getCategories() } returns emptyList()
 
         val viewModel = CatalogViewModel(categoryRepository)
 
         assertTrue(viewModel.state.value.currentCategory!!.isSyntheticRoot())
-
-        viewModel.openMembers()
-        viewModel.openCreateCard()
-
-        assertFalse(viewModel.state.value.showMembers)
-        assertFalse(viewModel.state.value.showCardForm)
+        assertFalse(viewModel.state.value.currentCategory!!.canEditCards())
+        assertFalse(viewModel.state.value.currentCategory!!.canManageMembers())
     }
 
     private fun category(

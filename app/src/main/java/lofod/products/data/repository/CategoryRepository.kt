@@ -45,6 +45,9 @@ class CategoryRepository @Inject constructor(
         request: CreateCardRequest
     ): List<CardResponse> = categoryApi.updateCard(categoryId, cardId, request).bodyOrThrow()
 
+    suspend fun getCard(categoryId: String, cardId: String): CardResponse =
+        categoryApi.getCard(categoryId, cardId)
+
     suspend fun deleteCard(categoryId: String, cardId: String) {
         categoryApi.deleteCard(categoryId, cardId).ensureSuccess()
     }

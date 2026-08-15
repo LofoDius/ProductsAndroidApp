@@ -1,5 +1,6 @@
 package lofod.products.ui.members
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,10 +12,10 @@ import kotlinx.coroutines.launch
 import lofod.products.data.remote.response.MemberResponse
 import lofod.products.data.repository.CategoryRepository
 import lofod.products.ui.common.ErrorMapper
+import lofod.products.ui.common.findCategoryById
 import javax.inject.Inject
 
 data class MembersUiState(
-    val isVisible: Boolean = false,
     val categoryId: String? = null,
     val categoryName: String = "",
     val members: List<MemberResponse> = emptyList(),
@@ -26,30 +27,31 @@ data class MembersUiState(
 
 @HiltViewModel
 class MembersViewModel @Inject constructor(
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MembersUiState())
     val state: StateFlow<MembersUiState> = _state.asStateFlow()
 
-    fun open(categoryId: String, categoryName: String) {
+    init {
+        val categoryId = checkNotNull(savedStateHandle.get<String>("categoryId"))
         viewModelScope.launch {
             _state.value = MembersUiState(
-                isVisible = true,
                 categoryId = categoryId,
-                categoryName = categoryName,
                 isLoading = true
             )
+            loadCategoryName(categoryId)
             loadMembers(categoryId)
         }
     }
 
-    fun dismiss() {
-        _state.value = MembersUiState()
-    }
-
     fun onUsernameChange(value: String) {
         _state.update { it.copy(usernameInput = value, errorMessage = null) }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(errorMessage = null) }
     }
 
     fun invite() {
@@ -89,6 +91,16 @@ class MembersViewModel @Inject constructor(
                     it.copy(isSubmitting = false, errorMessage = ErrorMapper.toMessage(e))
                 }
             }
+        }
+    }
+
+    private suspend fun loadCategoryName(categoryId: String) {
+        try {
+            val children = categoryRepository.getCategories()
+            val category = findCategoryById(categoryId, children)
+            _state.update { it.copy(categoryName = category?.name.orEmpty()) }
+        } catch (_: Exception) {
+            // Title falls back to "Участники" when name is empty.
         }
     }
 

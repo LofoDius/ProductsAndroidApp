@@ -29,12 +29,7 @@ data class CatalogUiState(
     val isSearchMode: Boolean = false,
     val expandedCardId: String? = null,
     val categoryPendingDelete: CategoryResponse? = null,
-    val cardPendingDelete: CardResponse? = null,
-    val showCategoryForm: Boolean = false,
-    val categoryFormTarget: CategoryResponse? = null,
-    val showCardForm: Boolean = false,
-    val cardFormTarget: CardResponse? = null,
-    val showMembers: Boolean = false
+    val cardPendingDelete: CardResponse? = null
 )
 
 @HiltViewModel
@@ -144,56 +139,19 @@ class CatalogViewModel @Inject constructor(
         }
     }
 
-    fun openCreateCategory() {
-        _state.update {
-            it.copy(showCategoryForm = true, categoryFormTarget = null)
-        }
-    }
-
-    fun openEditCategory(category: CategoryResponse) {
-        _state.update {
-            it.copy(showCategoryForm = true, categoryFormTarget = category)
-        }
-    }
-
-    fun closeCategoryForm() {
-        _state.update {
-            it.copy(showCategoryForm = false, categoryFormTarget = null)
-        }
-    }
-
-    fun onCategorySaved() {
-        closeCategoryForm()
+    fun onCategoryFormReturned() {
         refresh()
     }
 
-    fun openCreateCard() {
-        val current = _state.value.currentCategory ?: return
-        if (!current.canEditCards()) return
-        _state.update {
-            it.copy(showCardForm = true, cardFormTarget = null)
-        }
-    }
-
-    fun openEditCard(card: CardResponse) {
-        _state.update {
-            it.copy(showCardForm = true, cardFormTarget = card)
-        }
-    }
-
-    fun closeCardForm() {
-        _state.update {
-            it.copy(showCardForm = false, cardFormTarget = null)
-        }
-    }
-
-    fun onCardsChanged(cards: List<CardResponse>) {
-        closeCardForm()
+    fun onCardFormReturned() {
         val query = _state.value.searchQuery
         if (_state.value.isSearchMode && query.isNotBlank()) {
             onSearchQueryChange(query)
         } else {
-            _state.update { it.copy(cards = cards) }
+            val current = _state.value.currentCategory
+            if (current != null && !current.isSyntheticRoot()) {
+                loadCards(current.categoryId)
+            }
         }
         refreshTreeOnly()
     }
@@ -256,16 +214,6 @@ class CatalogViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    fun openMembers() {
-        val current = _state.value.currentCategory ?: return
-        if (!current.canManageMembers()) return
-        _state.update { it.copy(showMembers = true) }
-    }
-
-    fun closeMembers() {
-        _state.update { it.copy(showMembers = false) }
     }
 
     fun clearActionError() {

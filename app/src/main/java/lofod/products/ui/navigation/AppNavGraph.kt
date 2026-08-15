@@ -11,11 +11,16 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import lofod.products.ui.auth.LoginScreen
 import lofod.products.ui.auth.RegisterScreen
+import lofod.products.ui.card.CardFormScreen
 import lofod.products.ui.catalog.CatalogScreen
+import lofod.products.ui.category.CategoryFormScreen
+import lofod.products.ui.members.MembersScreen
 import lofod.products.ui.session.SessionBootstrapState
 import lofod.products.ui.session.SessionNavEvent
 import lofod.products.ui.session.SessionViewModel
@@ -82,8 +87,114 @@ fun AppNavGraph(
                         }
                     )
                 }
-                composable(Routes.CATALOG) {
-                    CatalogScreen(sessionViewModel = sessionViewModel)
+                composable(Routes.CATALOG) { entry ->
+                    val cardFormSaved by entry.savedStateHandle
+                        .getStateFlow(Routes.KEY_CARD_FORM_SAVED, false)
+                        .collectAsStateWithLifecycle()
+                    val categoryFormSaved by entry.savedStateHandle
+                        .getStateFlow(Routes.KEY_CATEGORY_FORM_SAVED, false)
+                        .collectAsStateWithLifecycle()
+                    CatalogScreen(
+                        sessionViewModel = sessionViewModel,
+                        onCreateCard = { categoryId ->
+                            navController.navigate(Routes.cardCreate(categoryId))
+                        },
+                        onEditCard = { categoryId, cardId ->
+                            navController.navigate(Routes.cardEdit(categoryId, cardId))
+                        },
+                        onOpenMembers = { categoryId ->
+                            navController.navigate(Routes.categoryMembers(categoryId))
+                        },
+                        cardFormSaved = cardFormSaved,
+                        onCardFormSavedConsumed = {
+                            entry.savedStateHandle[Routes.KEY_CARD_FORM_SAVED] = false
+                        },
+                        onCreateCategory = { parentId ->
+                            navController.navigate(Routes.categoryCreate(parentId))
+                        },
+                        onEditCategory = { categoryId ->
+                            navController.navigate(Routes.categoryEdit(categoryId))
+                        },
+                        categoryFormSaved = categoryFormSaved,
+                        onCategoryFormSavedConsumed = {
+                            entry.savedStateHandle[Routes.KEY_CATEGORY_FORM_SAVED] = false
+                        }
+                    )
+                }
+                composable(
+                    route = Routes.CATEGORY_MEMBERS,
+                    arguments = listOf(
+                        navArgument(Routes.ARG_CATEGORY_ID) { type = NavType.StringType }
+                    )
+                ) {
+                    MembersScreen(
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Routes.CARD_CREATE,
+                    arguments = listOf(
+                        navArgument(Routes.ARG_CATEGORY_ID) { type = NavType.StringType }
+                    )
+                ) {
+                    CardFormScreen(
+                        onSaved = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(Routes.KEY_CARD_FORM_SAVED, true)
+                            navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Routes.CARD_EDIT,
+                    arguments = listOf(
+                        navArgument(Routes.ARG_CATEGORY_ID) { type = NavType.StringType },
+                        navArgument(Routes.ARG_CARD_ID) { type = NavType.StringType }
+                    )
+                ) {
+                    CardFormScreen(
+                        onSaved = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(Routes.KEY_CARD_FORM_SAVED, true)
+                            navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Routes.CATEGORY_CREATE,
+                    arguments = listOf(
+                        navArgument(Routes.ARG_PARENT_ID) { type = NavType.StringType }
+                    )
+                ) {
+                    CategoryFormScreen(
+                        onSaved = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(Routes.KEY_CATEGORY_FORM_SAVED, true)
+                            navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Routes.CATEGORY_EDIT,
+                    arguments = listOf(
+                        navArgument(Routes.ARG_CATEGORY_ID) { type = NavType.StringType }
+                    )
+                ) {
+                    CategoryFormScreen(
+                        onSaved = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(Routes.KEY_CATEGORY_FORM_SAVED, true)
+                            navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
         }
