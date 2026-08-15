@@ -73,7 +73,7 @@ lofod.productsapi
 | `User` | Mongo document | username (unique), passwordHash (BCrypt), createdAt |
 | `Session` | Mongo document | id = токен; userId; expiresAt (TTL index) |
 | `Category` | Mongo document | дерево: parentId; ownerId; memberIds на корне; embedded cards; imageId |
-| `Card` | Embedded в Category | name, imageId, price/quality, description |
+| `Card` | Embedded в Category | name, imageId, price/quality, rating 0..10, description |
 | `Image` | Mongo document | Base64 после сжатия |
 
 Подробнее: [04-data-model.md](./04-data-model.md).
@@ -110,8 +110,8 @@ TTL: `app.session.ttl-days` (default 30). Mongo TTL index `session_expires_at_tt
 | Service | Ответственность |
 |---------|-----------------|
 | `CategoryService` | дерево, create/update/delete категории (+ subtree), ACL |
-| `CardService` | CRUD карточек + search (фильтр по доступу) |
-| `ImageService` | upload (Thumbnailator ≤1024 px), get, deleteIfPresent |
+| `CardService` | CRUD карточек + search (фильтр по доступу); `rating` 0..10 иначе 400 |
+| `ImageService` | upload (Thumbnailator ≤1024 px width, JPEG `outputFormat` + quality по размеру файла), get, deleteIfPresent |
 | `MemberService` | invite по username / remove / list (без владельца в списке) |
 | `CategoryMapper` / `CardMapper` | domain → response DTO |
 

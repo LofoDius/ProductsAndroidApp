@@ -15,6 +15,7 @@ Category (document)
   │     ├── cardId
   │     ├── name, description?
   │     ├── priceLevel, qualityLevel
+  │     ├── rating (0..10; отсутствует в старых docs → 0)
   │     └── imageId → Image?
   └── imageId → Image?
 
@@ -76,6 +77,7 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 | imageId | ObjectId? | Картинка |
 | priceLevel | PriceLevel | Уровень цены |
 | qualityLevel | QualityLevel | Уровень качества |
+| rating | Int | Рейтинг 0..10 (шаг 1); default `0` если поля нет в Mongo |
 | description | String? | Описание |
 
 ### Image

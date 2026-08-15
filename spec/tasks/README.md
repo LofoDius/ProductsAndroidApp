@@ -1,19 +1,14 @@
 # Задачи на исполнение (AI agents)
 
-Очередь пуста: выполненные задачи удалены перед коммитом.
-
-Новые задачи кладите сюда:
-
-```
-spec/tasks/
-  api/       — products-api
-  android/   — ProductsAndroidApp
-  shared/    — спека / кросс-репо
-```
+Очередь дефектов и доработок после auth/ACL rewrite.
 
 **Репозитории:**
 - Android (канон): `D:\CursorProjects\ProductsAndroidApp`
 - API (зеркало API-задач): `D:\IdeaProjects\products-api\spec\tasks\`
+
+## Порядок выполнения
+
+Очередь пуста.
 
 ## Формат задачи
 

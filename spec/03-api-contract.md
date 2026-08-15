@@ -82,6 +82,7 @@ CreateCardRequest(
   imageId: String?,
   priceLevel: PriceLevel,
   qualityLevel: QualityLevel,
+  rating: Int = 0,          // 0..10; вне диапазона → 400
   description: String?
 )
 UpdateCardRequest( /* те же поля */ )
@@ -114,6 +115,7 @@ CardResponse(
   imageId: String?,
   priceLevel: PriceLevel,
   qualityLevel: QualityLevel,
+  rating: Int,              // 0..10; у старых документов без поля → 0
   description: String?
 )
 
