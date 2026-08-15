@@ -73,9 +73,21 @@ ACL: invite/remove правят `memberIds` **корня** дерева; list н
 ```kotlin
 AuthRequest(username: String, password: String)
 
-CreateCategoryRequest(parentId: ObjectId?, name: String, imageId: String?)
-UpdateCategoryRequest(parentId: ObjectId?, name: String, imageId: String?)
+CreateCategoryRequest(
+  parentId: ObjectId?,
+  name: String,
+  imageId: String?,
+  customFields: List<CustomFieldDefinitionDto> = emptyList(),
+)
+UpdateCategoryRequest(
+  parentId: ObjectId?,
+  name: String,
+  imageId: String?,
+  customFields: List<CustomFieldDefinitionDto>? = null, // null = не менять схему
+)
 // null parentId / imageId при update = оставить текущее значение
+
+CustomFieldDefinitionDto(fieldId: String? = null, title: String, type: CustomFieldType)
 
 CreateCardRequest(
   name: String,
@@ -83,9 +95,12 @@ CreateCardRequest(
   priceLevel: PriceLevel,
   qualityLevel: QualityLevel,
   rating: Int = 0,          // 0..10; вне диапазона → 400
-  description: String?
+  description: String?,
+  customFieldValues: List<CustomFieldValueDto> = emptyList(),
 )
 UpdateCardRequest( /* те же поля */ )
+
+CustomFieldValueDto(fieldId: String, value: String?)
 
 InviteMemberRequest(username: String)
 ```
@@ -105,6 +120,8 @@ CategoryResponse(
   cardsAmount: Int,
   subcategories: List<CategoryResponse>,
   imageId: String?,
+  customFields: List<CustomFieldDefinitionDto> = emptyList(),
+  customFieldArchive: List<CustomFieldDefinitionDto> = emptyList(),
   role: CategoryRole  // OWNER | MEMBER
 )
 
@@ -116,7 +133,8 @@ CardResponse(
   priceLevel: PriceLevel,
   qualityLevel: QualityLevel,
   rating: Int,              // 0..10; у старых документов без поля → 0
-  description: String?
+  description: String?,
+  customFieldValues: List<CustomFieldValueDto> = emptyList(),
 )
 
 MemberResponse(userId: String, username: String)
@@ -130,9 +148,21 @@ ImageResponse(image: String)  // Base64
 enum class PriceLevel { LOW_PRICE, MEDIUM_PRICE, HIGH_PRICE }
 enum class QualityLevel { LOW_QUALITY, MEDIUM_QUALITY, HIGH_QUALITY }
 enum class CategoryRole { OWNER, MEMBER }
+enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 ```
 
 Имена совпадают на сервере и в Android-клиенте.
+
+### Custom fields (контракт)
+
+| Правило | Детали |
+|---------|--------|
+| Лимит | ≤10 активных полей на категорию; иначе 400 |
+| Archive | снятые с активной схемы поля; в `CategoryResponse.customFieldArchive` |
+| Restore | по `fieldId` из архива или по `title`+`type`, если `fieldId` не передан |
+| Card values | string `value` (типизация по схеме); orphan ids не purge при удалении поля; merge при save |
+| ACL | схема — OWNER (через create/update category); значения — любой с access (CRUD card) |
+| Value formats | NUMBER — число; BOOLEAN — `"true"`/`"false"`; DATE — `yyyy-MM-dd`; COUNTER — целое; TEXT — freely; `null` value допустим |
 
 ## Соответствие клиент ↔ сервер
 
@@ -143,13 +173,15 @@ enum class CategoryRole { OWNER, MEMBER }
 | DELETE /auth/logout | Да |
 | GET /auth/me | Да (restore session) |
 | GET /category/tree | Да |
-| CRUD category | Да (owner-gated) |
+| CRUD category | Да (`CategoryFormScreen`, owner-gated) |
+| category customFields / archive | OWNER на форме категории; hints из archive |
 | category/image upload+get | Да |
 | cards list/create/update/delete | Да |
-| GET single card | API есть; UI не вызывает |
+| GET single card | Да (`CardFormScreen` edit) |
+| card customFieldValues | Да (`CardFormScreen`, access) |
 | card/image upload+get | Да |
 | search | Да |
-| members list/invite/remove | Да (MembersDialog, owner) |
+| members list/invite/remove | Да (`MembersScreen`, owner) |
 
 ## Ошибки
 

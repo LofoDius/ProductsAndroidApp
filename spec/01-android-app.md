@@ -68,26 +68,39 @@ lofod.products
     ├── session/        SessionViewModel
     ├── auth/           LoginScreen, RegisterScreen, AuthViewModel
     ├── catalog/        CatalogScreen, CatalogViewModel, CatalogAcl, drawer, CardListItem
-    ├── category/       CategoryFormDialog, CategoryFormViewModel
-    ├── card/           CardFormDialog, CardFormViewModel
-    ├── members/        MembersDialog, MembersViewModel
-    ├── common/         ErrorMapper, helpers
+    ├── category/       CategoryFormScreen, CategoryFormViewModel
+    ├── card/           CardFormScreen, CardFormViewModel
+    ├── members/        MembersScreen, MembersViewModel
+    ├── common/         ErrorMapper, ButtonProgressIndicator, RatingBar, CategoryIcon / RemoteImage
     └── theme/
 ```
 
 ## Навигация
 
-Маршруты (`Routes`): `login`, `register`, `catalog`.  
-Формы категорий/карточек и участники — диалоги поверх каталога, не отдельные destinations.
+Маршруты (`Routes`):
+
+| Route | Экран |
+|-------|--------|
+| `login` / `register` | auth |
+| `catalog` | `CatalogScreen` |
+| `card/create/{categoryId}`, `card/edit/{categoryId}/{cardId}` | `CardFormScreen` |
+| `category/create/{parentId}`, `category/edit/{categoryId}` | `CategoryFormScreen` |
+| `category/{categoryId}/members` | `MembersScreen` |
+
+После успешного save форма ставит флаг на `SavedStateHandle` каталога: `KEY_CARD_FORM_SAVED` / `KEY_CATEGORY_FORM_SAVED` (каталог читает и сбрасывает).  
+Подтверждение удаления категории/карточки — `AlertDialog` на `CatalogScreen` (не отдельный route).
 
 ## UI и ACL
 
+Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + snackbar, `ExposedDropdownMenuBox` в форме оценки, dynamic color (fallback — нейтральная зелёная схема, не шаблонный purple).
+
 | Экран / composable | Роль |
 |--------------------|------|
-| `LoginScreen` / `RegisterScreen` | Вход и регистрация (валидация: username не пустой; password ≥ 6) |
-| `CatalogScreen` | Drawer, scaffold, поиск, FAB, CRUD-диалоги |
-| `CategoryFormDialog` / `CardFormDialog` | Создание/редактирование |
-| `MembersDialog` | Список / invite / remove участников (только OWNER) |
+| `LoginScreen` / `RegisterScreen` | Вход и регистрация (валидация: username не пустой; password ≥ 6); `Scaffold` + Snackbar |
+| `CatalogScreen` | Drawer, scaffold, поиск, FAB, snackbar; иконка категории в drawer и в title; delete confirms — `AlertDialog` |
+| `CategoryFormScreen` | Полноэкранная create/edit категории (OWNER); схема custom fields (≤10) |
+| `CardFormScreen` | Полноэкранная create/edit оценки; `RatingBar`; edit через `GET category/{id}/card/{cardId}`; значения custom fields |
+| `MembersScreen` | Полноэкранный список / invite / remove участников (только OWNER) |
 
 Клиентские проверки (`CatalogAcl`):
 
@@ -99,7 +112,18 @@ lofod.products
 | Edit cards | любая реальная категория (`OWNER` или `MEMBER`) |
 
 Синтетический корень на клиенте: id `"-1"`, имя «Все категории» (на сервере не хранится).  
-В drawer роли показываются как «Владелец» / «Участник».
+В drawer роли показываются как «Владелец» / «Участник».  
+Иконка категории (`imageId` → `getCategoryImage`, иначе placeholder Folder): в header/строках drawer и в title top bar (не для synthetic root / режима поиска).  
+Пустой каталог (синтетический корень без top-level категорий): в drawer одно сообщение «Нет категорий» вместо заголовка «Все категории» / «Выберите категорию» / «Нет подкатегорий»; пустая ветка внутри существующей категории по-прежнему «Нет подкатегорий».  
+В списке оценок (`CardListItem`) блок изображения показывается только при успешно загруженном `imageId`; без картинки и при ошибке загрузки placeholder не рисуется.  
+Рейтинг карточки: API `rating` Int 0..10; UI — 5 звёзд (половина = +1). В `CardListItem` — read-only `RatingBar`; в `CardFormScreen` — интерактивный (tap / scrub). Default при создании: `0`.
+
+### Пользовательские поля (custom fields)
+
+- **Схема** (активные ≤10 + архив): правит только OWNER на `CategoryFormScreen`; уходит в `CreateCategoryRequest` / update category.
+- **Значения** на карточке: заполняют OWNER и MEMBER на `CardFormScreen` по активной схеме категории (`customFieldValues`: `fieldId` + string `value`).
+- Типы: `TEXT`, `NUMBER`, `BOOLEAN`, `DATE`, `COUNTER` (см. [03-api-contract.md](./03-api-contract.md)).
+- UI схемы на форме категории: подсказки title — dropdown из `customFieldArchive`, отфильтрованный по выбранному типу; по умолчанию title **пустой** (без autofill); выбор подсказки выставляет `title` + `fieldId` (restore).
 
 ## Сетевой слой
 
@@ -131,7 +155,7 @@ lofod.products
 | `getCategoryCards` | GET | `category/{id}/cards` | |
 | `createCard` | POST | `category/{id}/card` | |
 | `updateCard` | PUT | `category/{id}/card/{cardId}` | |
-| `getCard` | GET | `category/{id}/card/{cardId}` | объявлен; UI не использует |
+| `getCard` | GET | `category/{id}/card/{cardId}` | используется `CardFormScreen` (edit) |
 | `deleteCard` | DELETE | `category/{id}/card/{cardId}` | |
 | `uploadCardImage` | POST multipart | `card/image` | используется формой карточки |
 | `getCardImage` | GET | `card/image/{id}` | |
@@ -142,8 +166,9 @@ lofod.products
 
 ### DTO / enums (клиент)
 
-- `CategoryResponse`: name, categoryId, parentId, counts, nested subcategories, imageId, **role**
-- `CardResponse`: cardId, categoryId, name, imageId, priceLevel, qualityLevel, description
+- `CategoryResponse`: name, categoryId, parentId, counts, nested subcategories, imageId, **role**, **customFields**, **customFieldArchive**
+- `CardResponse`: cardId, categoryId, name, imageId, priceLevel, qualityLevel, **rating** (0..10, default 0), description, **customFieldValues**
+- `CustomFieldDefinitionDto(fieldId?, title, type)`, `CustomFieldValueDto(fieldId, value?)`
 - `MemberResponse` / `UserSummaryResponse`: userId, username
 - `ImageResponse` / `ImageIdResponse`
 - `AuthCredentialsRequest(username, password)`
@@ -157,6 +182,8 @@ enum class QualityLevel { LOW_QUALITY, MEDIUM_QUALITY, HIGH_QUALITY }
 // UI labels: «Бич» / «Ну норм» / «Лухари»
 
 enum class CategoryRole { OWNER, MEMBER }
+
+enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 ```
 
 ## Auth на клиенте
@@ -177,10 +204,13 @@ enum class CategoryRole { OWNER, MEMBER }
 
 ### Категории и карточки
 
-- Выбор категории → refresh дерева + cards.
-- Создание/редактирование через диалоги (родитель — только OWNER-деревья; корневой parent = `null`).
-- Карточки: FAB при `canEditCards()`; defaults при create — `LOW_PRICE` / `LOW_QUALITY`.
+- Выбор категории → refresh дерева + cards; иконка категории в drawer и title.
+- Создание/редактирование категории — `CategoryFormScreen` (`category/create/{parentId}`, `category/edit/{categoryId}`); родитель — только OWNER-деревья; корневой parent = `null`; schema custom fields — OWNER.
+- Карточки: FAB / edit → `CardFormScreen` (`card/create/...`, `card/edit/...`); defaults при create — `LOW_PRICE` / `LOW_QUALITY` / `rating = 0`; значения custom fields по активной схеме.
+- Форма оценки: `ExposedDropdownMenu` для `priceLevel` / `qualityLevel` и интерактивный рейтинг звёздами (`RatingBar`); список показывает рейтинг read-only.
 - Поиск через top bar → тот же список карточек.
+- Удаление категории/карточки — confirm `AlertDialog` на каталоге.
+- Участники — `MembersScreen` (`category/{categoryId}/members`).
 
 ### Участники
 

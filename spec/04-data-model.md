@@ -11,11 +11,14 @@ Category (document)
   ├── parentId → Category? (null = root)
   ├── ownerId → User
   ├── memberIds[] → User   (только на корне; ACL на всё поддерево)
+  ├── customFields[] → CustomFieldDefinition   (активные, ≤10)
+  ├── customFieldArchive[] → CustomFieldDefinition
   ├── cards[] → Card (embedded)
   │     ├── cardId
   │     ├── name, description?
   │     ├── priceLevel, qualityLevel
   │     ├── rating (0..10; отсутствует в старых docs → 0)
+  │     ├── customFieldValues[] → { fieldId, value? }
   │     └── imageId → Image?
   └── imageId → Image?
 
@@ -67,6 +70,8 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 | memberIds | MutableList\<ObjectId\> | Участники; **meaningful только на корне** |
 | cards | MutableList\<Card\> | Встроенные карточки |
 | imageId | ObjectId? | Картинка категории |
+| customFields | List\<CustomFieldDefinition\> | Активная схема (≤10); старые docs → empty |
+| customFieldArchive | List\<CustomFieldDefinition\> | Снятые поля для restore; значения на cards не purge |
 
 ### Card (embedded)
 
@@ -79,6 +84,22 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 | qualityLevel | QualityLevel | Уровень качества |
 | rating | Int | Рейтинг 0..10 (шаг 1); default `0` если поля нет в Mongo |
 | description | String? | Описание |
+| customFieldValues | List\<CustomFieldValue\> | Значения по fieldId; orphans архивных полей сохраняются |
+
+### CustomFieldDefinition (embedded)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| fieldId | ObjectId | Стабильный id (для restore и значений на cards) |
+| title | String | Отображаемое название |
+| type | CustomFieldType | TEXT / NUMBER / BOOLEAN / DATE / COUNTER |
+
+### CustomFieldValue (embedded in Card)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| fieldId | ObjectId | Ссылка на definition (active или archive) |
+| value | String? | Строковое значение; формат зависит от type |
 
 ### Image
 
@@ -91,7 +112,7 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 
 | Класс | Роль |
 |-------|------|
-| `FullCategory` | Развёрнутое дерево в памяти (+ `role`) для маппинга в `CategoryResponse` |
+| `FullCategory` | Развёрнутое дерево в памяти (+ `role`, custom fields) для маппинга в `CategoryResponse` |
 | `CategoryRole` | `OWNER` \| `MEMBER` |
 | `UserPrincipal` | Principal в SecurityContext после filter |
 | `LoginResult` | user + sessionToken внутри AuthService |
@@ -102,6 +123,7 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 enum class PriceLevel { LOW_PRICE, MEDIUM_PRICE, HIGH_PRICE }
 enum class QualityLevel { LOW_QUALITY, MEDIUM_QUALITY, HIGH_QUALITY }
 enum class CategoryRole { OWNER, MEMBER }
+enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 ```
 
 ## Репозитории
@@ -127,11 +149,12 @@ ImageRepository : MongoRepository<Image, String>
 
 | Клиентский тип | Соответствие |
 |----------------|--------------|
-| `CategoryResponse` (+ `role`) | Дерево/узел категории |
-| `CardResponse` | Карточка |
+| `CategoryResponse` (+ `role`, customFields, archive) | Дерево/узел категории |
+| `CardResponse` (+ customFieldValues) | Карточка |
+| `CustomFieldDefinitionDto` / `CustomFieldValueDto` | Схема / значения |
 | `MemberResponse` / `UserSummaryResponse` | Участник / текущий user |
 | `ImageResponse` / `ImageIdResponse` | Картинки |
-| `PriceLevel` / `QualityLevel` | Те же enum-имена + русские label в UI |
+| `PriceLevel` / `QualityLevel` / `CustomFieldType` | Те же enum-имена (+ русские label в UI где нужно) |
 | `CategoryRole` | OWNER / MEMBER |
 | `SessionDataStore` + `SessionTokenHolder` | Session id |
 
@@ -143,3 +166,4 @@ ImageRepository : MongoRepository<Image, String>
 4. **Изображения** отделены; при delete card связанный Image удаляется; при delete category — image категории и рекурсия подкатегорий.
 5. **Сессия** привязана к userId и имеет expiresAt (приложение + Mongo TTL).
 6. **Пароли** только per-user BCrypt; shared Password-документа нет.
+7. **Custom fields:** активных ≤10; удаление из схемы → archive, не purge значений на cards; restore по fieldId или title+type; при save card merge orphans.

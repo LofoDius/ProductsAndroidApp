@@ -9,7 +9,7 @@
 | [02-products-api.md](./02-products-api.md) | Реализация backend API (`products-api`) |
 | [03-api-contract.md](./03-api-contract.md) | Контракт REST API (эндпоинты, DTO, auth) |
 | [04-data-model.md](./04-data-model.md) | Модель данных и связи |
-| [tasks/](./tasks/README.md) | Очередь задач для AI agents (сейчас пуста) |
+| [tasks/](./tasks/README.md) | Очередь задач для AI agents (T10–T12) |
 
 > Документы `00`–`04` описывают **текущую** реализацию: per-user auth, session TTL, category ACL owner/member.
 

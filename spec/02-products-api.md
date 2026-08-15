@@ -72,8 +72,8 @@ lofod.productsapi
 |----------|----------|------|
 | `User` | Mongo document | username (unique), passwordHash (BCrypt), createdAt |
 | `Session` | Mongo document | id = токен; userId; expiresAt (TTL index) |
-| `Category` | Mongo document | дерево: parentId; ownerId; memberIds на корне; embedded cards; imageId |
-| `Card` | Embedded в Category | name, imageId, price/quality, rating 0..10, description |
+| `Category` | Mongo document | дерево: parentId; ownerId; memberIds на корне; embedded cards; imageId; **customFields** (≤10) + **customFieldArchive** |
+| `Card` | Embedded в Category | name, imageId, price/quality, rating 0..10, description, **customFieldValues** |
 | `Image` | Mongo document | Base64 после сжатия |
 
 Подробнее: [04-data-model.md](./04-data-model.md).
@@ -101,7 +101,7 @@ TTL: `app.session.ttl-days` (default 30). Mongo TTL index `session_expires_at_tt
 |----------|------|
 | Read tree/cards, CRUD cards, search, list members | OWNER или MEMBER |
 | Create root category | любой authenticated (становится owner) |
-| Create child / update / delete category | OWNER |
+| Create child / update / delete category (в т.ч. схема custom fields) | OWNER |
 | Invite / remove member | OWNER (мутации только на корневом `memberIds`) |
 | Image upload/get | authenticated (без category ACL) |
 
@@ -109,13 +109,23 @@ TTL: `app.session.ttl-days` (default 30). Mongo TTL index `session_expires_at_tt
 
 | Service | Ответственность |
 |---------|-----------------|
-| `CategoryService` | дерево, create/update/delete категории (+ subtree), ACL |
-| `CardService` | CRUD карточек + search (фильтр по доступу); `rating` 0..10 иначе 400 |
+| `CategoryService` | дерево, create/update/delete категории (+ subtree), ACL; reconcile custom fields |
+| `CardService` | CRUD карточек + search (фильтр по доступу); `rating` 0..10 иначе 400; merge `customFieldValues` |
 | `ImageService` | upload (Thumbnailator ≤1024 px width, JPEG `outputFormat` + quality по размеру файла), get, deleteIfPresent |
 | `MemberService` | invite по username / remove / list (без владельца в списке) |
 | `CategoryMapper` / `CardMapper` | domain → response DTO |
 
-Update category: `parentId == null` или `imageId == null` в запросе означает **оставить текущее** значение (не сброс).
+Update category: `parentId == null` или `imageId == null` в запросе означает **оставить текущее** значение (не сброс).  
+`customFields == null` при update — схема без изменений; если список передан — полная reconcile активного набора.
+
+### Custom fields
+
+- На категории: активные `customFields` (≤10) и `customFieldArchive` (снятые с активной схемы).
+- Типы: `TEXT`, `NUMBER`, `BOOLEAN`, `DATE`, `COUNTER`.
+- Restore при reconcile: по `fieldId` из архива, иначе (без `fieldId`) по совпадению `title` + `type`; type у существующего/архивного id не меняется.
+- Поля, убранные из активного списка, уходят в архив; значения на карточках **не удаляются**.
+- На карточке: `customFieldValues` (`fieldId` + string `value`); при save incoming валидируется только против активной схемы, orphan-значения (fieldId вне схемы) **сохраняются** (merge).
+- `CategoryResponse` отдаёт и `customFields`, и `customFieldArchive`.
 
 ## Security
 
@@ -154,3 +164,4 @@ data class ErrorResponse(val code: String, val message: String)
 2. Дерево строится рекурсивно по `parentId` (N+1 lookup детей).
 3. `memberIds` meaningful только на корне; invite/remove всегда правят корень.
 4. Create card / update card возвращают **весь** список карточек категории.
+5. Custom field values на cards не чистятся при archive поля; клиент показывает только активную схему.
