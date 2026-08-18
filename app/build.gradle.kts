@@ -8,15 +8,22 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Достаем apiUrl из local.properties
-val localProperties = File(rootDir, "local.properties")
-val apiUrl: String = if (localProperties.exists()) {
-    val properties = Properties()
-    properties.load(localProperties.inputStream())
-    properties.getProperty("API_URL") ?: "http://10.0.2.2:8080"
-} else {
-    "http://10.0.2.2:8080"
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
+
+fun signingProperty(name: String): String? =
+    System.getenv(name) ?: localProperties.getProperty(name)
+
+val signingStoreFile = signingProperty("SIGNING_STORE_FILE")?.takeIf { it.isNotBlank() }
+val releaseVersionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
+val releaseVersionName = providers.gradleProperty("versionName").orElse("1.0.1").get()
+
+val apiUrl: String = System.getenv("API_BASE_URL")
+    ?: localProperties.getProperty("API_URL")
+    ?: "http://10.0.2.2:8080"
 
 android {
     namespace = "lofod.products"
@@ -26,13 +33,28 @@ android {
         applicationId = "lofod.products"
         minSdk = 31
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.1"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    signingConfigs {
+        if (signingStoreFile != null) {
+            create("release") {
+                storeFile = file(signingStoreFile)
+                storePassword = signingProperty("SIGNING_STORE_PASSWORD")
+                keyAlias = signingProperty("SIGNING_KEY_ALIAS")
+                keyPassword = signingProperty("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (signingStoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             buildConfigField("String", "API_URL", "\"$apiUrl\"")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

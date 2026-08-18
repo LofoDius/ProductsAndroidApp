@@ -47,6 +47,8 @@ import lofod.products.ui.session.SessionViewModel
 @Composable
 fun CatalogScreen(
     sessionViewModel: SessionViewModel,
+    isUpdateAvailable: Boolean,
+    onUpdateApp: () -> Unit,
     onCreateCard: (categoryId: String) -> Unit,
     onEditCard: (categoryId: String, cardId: String) -> Unit,
     onOpenMembers: (categoryId: String) -> Unit,
@@ -127,6 +129,8 @@ fun CatalogScreen(
                 scope = scope,
                 snackbarHostState = snackbarHostState,
                 isLoggingOut = isLoggingOut,
+                isUpdateAvailable = isUpdateAvailable,
+                onUpdateApp = onUpdateApp,
                 categoryRepository = categoryRepository,
                 catalogViewModel = catalogViewModel,
                 sessionViewModel = sessionViewModel,
@@ -201,6 +205,8 @@ private fun CatalogMainContent(
     scope: kotlinx.coroutines.CoroutineScope,
     snackbarHostState: SnackbarHostState,
     isLoggingOut: Boolean,
+    isUpdateAvailable: Boolean,
+    onUpdateApp: () -> Unit,
     categoryRepository: CategoryRepository,
     catalogViewModel: CatalogViewModel,
     sessionViewModel: SessionViewModel,
@@ -237,7 +243,12 @@ private fun CatalogMainContent(
                         sessionViewModel.clearLogoutError()
                         sessionViewModel.logout()
                     },
-                    isLoggingOut = isLoggingOut
+                    isLoggingOut = isLoggingOut,
+                    isUpdateAvailable = isUpdateAvailable,
+                    onUpdateApp = {
+                        scope.launch { drawerState.close() }
+                        onUpdateApp()
+                    },
                 )
             }
         }

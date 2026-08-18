@@ -24,13 +24,17 @@ import lofod.products.ui.members.MembersScreen
 import lofod.products.ui.session.SessionBootstrapState
 import lofod.products.ui.session.SessionNavEvent
 import lofod.products.ui.session.SessionViewModel
+import lofod.products.ui.update.AppUpdateHost
+import lofod.products.ui.update.AppUpdateViewModel
 
 @Composable
 fun AppNavGraph(
     navController: NavHostController,
-    sessionViewModel: SessionViewModel = hiltViewModel()
+    sessionViewModel: SessionViewModel = hiltViewModel(),
+    appUpdateViewModel: AppUpdateViewModel = hiltViewModel(),
 ) {
     val bootstrapState by sessionViewModel.bootstrapState.collectAsStateWithLifecycle()
+    val appUpdateState by appUpdateViewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         sessionViewModel.navEvents.collect { event ->
@@ -45,15 +49,16 @@ fun AppNavGraph(
         }
     }
 
-    when (bootstrapState) {
-        SessionBootstrapState.Loading -> {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (bootstrapState) {
+            SessionBootstrapState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
-        }
 
         SessionBootstrapState.Authenticated,
         SessionBootstrapState.Unauthenticated -> {
@@ -96,6 +101,8 @@ fun AppNavGraph(
                         .collectAsStateWithLifecycle()
                     CatalogScreen(
                         sessionViewModel = sessionViewModel,
+                        isUpdateAvailable = appUpdateState.availableRelease != null,
+                        onUpdateApp = appUpdateViewModel::startUpdate,
                         onCreateCard = { categoryId ->
                             navController.navigate(Routes.cardCreate(categoryId))
                         },
@@ -198,5 +205,18 @@ fun AppNavGraph(
                 }
             }
         }
+    }
+
+        AppUpdateHost(
+            state = appUpdateState,
+            onCheckForUpdate = appUpdateViewModel::checkForUpdate,
+            onStartUpdate = appUpdateViewModel::startUpdate,
+            onPostponeUpdate = appUpdateViewModel::postponeUpdate,
+            onCancelDownload = appUpdateViewModel::cancelDownload,
+            onInstallLaunched = appUpdateViewModel::onInstallLaunched,
+            onInstallFailed = appUpdateViewModel::onInstallFailed,
+            onCancelInstall = appUpdateViewModel::cancelInstall,
+            onConsumeError = appUpdateViewModel::consumeError,
+        )
     }
 }

@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">Products</string>
+    <string name="app_drawer_update_app">Обновить приложение</string>
+    <string name="app_update_dialog_title">Доступно обновление</string>
+    <string name="app_update_dialog_message">Доступна новая версия %1$s. Обновить приложение сейчас?</string>
+    <string name="app_update_confirm">Обновить</string>
+    <string name="app_update_later">Позже</string>
+    <string name="app_update_downloading_title">Загрузка обновления</string>
+    <string name="app_update_downloading_progress">Загружено %1$d%%</string>
+    <string name="app_update_cancel">Отмена</string>
+    <string name="app_update_ok">ОК</string>
+    <string name="app_update_error_title">Не удалось обновить</string>
+    <string name="app_update_error_download">Не удалось скачать обновление. Проверьте подключение и попробуйте снова.</string>
+    <string name="app_update_error_install">Не удалось запустить установку обновления.</string>
+    <string name="app_update_permission_title">Разрешите установку</string>
+    <string name="app_update_permission_message">Чтобы установить обновление, разрешите приложению устанавливать неизвестные приложения.</string>
+    <string name="app_update_permission_open_settings">Открыть настройки</string>
 </resources>

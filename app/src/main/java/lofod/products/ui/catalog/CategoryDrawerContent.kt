@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,8 +29,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import lofod.products.R
 import lofod.products.data.remote.model.CategoryRole
 import lofod.products.data.remote.response.CategoryResponse
 import lofod.products.ui.common.CategoryIcon
@@ -46,7 +49,9 @@ fun CategoryDrawerContent(
     onDeleteCategory: (CategoryResponse) -> Unit,
     onOpenMembers: () -> Unit,
     onLogout: () -> Unit,
-    isLoggingOut: Boolean
+    isLoggingOut: Boolean,
+    isUpdateAvailable: Boolean,
+    onUpdateApp: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -223,6 +228,16 @@ fun CategoryDrawerContent(
                 selected = false,
                 onClick = onOpenMembers,
                 icon = { Icon(Icons.Outlined.Group, contentDescription = null) },
+                modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+            )
+        }
+
+        if (isUpdateAvailable) {
+            NavigationDrawerItem(
+                label = { Text(stringResource(R.string.app_drawer_update_app)) },
+                selected = false,
+                onClick = onUpdateApp,
+                icon = { Icon(Icons.Outlined.SystemUpdate, contentDescription = null) },
                 modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
             )
         }
