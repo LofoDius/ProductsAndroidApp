@@ -30,20 +30,24 @@ spring.data.mongodb.database=productsDB
 spring.data.mongodb.auto-index-creation=true
 spring.security.filter.order=10
 spring.main.allow-circular-references=true
-spring.servlet.multipart.max-file-size=50MB
-spring.servlet.multipart.max-request-size=50MB
+spring.servlet.multipart.max-file-size=110MB
+spring.servlet.multipart.max-request-size=111MB
 app.session.ttl-days=30
+app.releases.path=data/app-releases
+app.releases.max-size-bytes=104857600
+app.releases.deploy-token=${APP_RELEASES_DEPLOY_TOKEN:}
 ```
 
-URI Mongo — из env `SPRING_MONGO_URI`. Auto-index: уникальный `username`, TTL по `Session.expiresAt`.
+URI Mongo — из env `SPRING_MONGO_URI`. Auto-index: уникальный `username`, TTL по `Session.expiresAt`.  
+Пустой `app.releases.deploy-token` отклоняет все `POST /app/releases`.
 
 ## Docker / home-server deploy
 
 One-command stack via `docker compose` in the API repo:
 
 - **Dockerfile** (multi-stage): build with `gradle:8.10.2-jdk21-alpine` (`bootJar`), runtime `amazoncorretto:21-alpine-jdk`.
-- **`docker-compose.yml`**: `mongo:7` + `api`; host port `${API_PORT:-18080}` → container `8080`; named volume `mongo_data`; API `depends_on` mongo with healthcheck.
-- **Env**: copy `.env.example` → `.env` (`MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `API_PORT`). Compose sets `SPRING_MONGO_URI` for the API service (authSource=admin, DB `productsDB`).
+- **`docker-compose.yml`**: `mongo:7` + `api`; host port `${API_PORT:-18080}` → container `8080`; named volumes `mongo_data`, `app_releases_data` (`/app/data/app-releases`); API `depends_on` mongo with healthcheck.
+- **Env**: copy `.env.example` → `.env` (`MONGO_ROOT_USERNAME`, `MONGO_ROOT_PASSWORD`, `API_PORT`, `APP_RELEASES_DEPLOY_TOKEN`). Compose sets `SPRING_MONGO_URI` and `APP_RELEASES_PATH` for the API service.
 
 
 ## Слои
@@ -57,8 +61,9 @@ Controller → Service → MongoRepository → MongoDB
 ```
 lofod.productsapi
 ├── ProductsApiApplication.kt
-├── controller/       AuthController, CategoryController
-├── service/          Auth, CategoryAccess, Category, Card, Image, Member + mapper/
+├── config/           AppReleaseProperties
+├── controller/       AuthController, CategoryController, AppReleaseController
+├── service/          Auth, CategoryAccess, Category, Card, Image, Member, AppRelease + mapper/
 ├── repository/       User, Session, Category, Image
 ├── model/            entities, enums, request/, response/
 ├── security/         SecurityConfig, SessionRequestFilter, PasswordEncoderConfig, UserPrincipal
@@ -113,6 +118,7 @@ TTL: `app.session.ttl-days` (default 30). Mongo TTL index `session_expires_at_tt
 | `CardService` | CRUD карточек + search (фильтр по доступу); `rating` 0..10 иначе 400; merge `customFieldValues` |
 | `ImageService` | upload (Thumbnailator ≤1024 px width, JPEG `outputFormat` + quality по размеру файла), get, deleteIfPresent |
 | `MemberService` | invite по username / remove / list (без владельца в списке) |
+| `AppReleaseService` | latest metadata/APK на диске; publish по `X-Deploy-Token` (constant-time compare) |
 | `CategoryMapper` / `CardMapper` | domain → response DTO |
 
 Update category: `parentId == null` или `imageId == null` в запросе означает **оставить текущее** значение (не сброс).  
@@ -142,6 +148,9 @@ Update category: `parentId == null` или `imageId == null` в запросе �
 
 - `/auth/register`
 - `/auth/login`
+- `/app/latest`
+- `/app/download`
+- `/app/releases` (не user-auth: сервис проверяет `X-Deploy-Token`)
 
 Также без auth: `OPTIONS`.
 
@@ -165,3 +174,4 @@ data class ErrorResponse(val code: String, val message: String)
 3. `memberIds` meaningful только на корне; invite/remove всегда правят корень.
 4. Create card / update card возвращают **весь** список карточек категории.
 5. Custom field values на cards не чистятся при archive поля; клиент показывает только активную схему.
+6. APK-релиз хранится как файлы `latest.apk` + `latest.json` в `app.releases.path` (не Mongo); публикация перезаписывает предыдущий релиз.

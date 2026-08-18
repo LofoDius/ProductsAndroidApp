@@ -20,15 +20,17 @@ Application: `ProductsApp` (`@HiltAndroidApp`)
 | Lifecycle / ViewModel | 2.8.7 |
 | minSdk / targetSdk / compileSdk | 31 / 34 / 35 |
 | JVM target | 11 |
-| versionName | 1.0.1 |
+| versionName | 1.0.1 (локально); CI задаёт `1.0.${{ github.run_number }}` |
 | UI | Jetpack Compose + Material 3 |
 | Сеть | Retrofit 2.9 + OkHttp + Gson + Scalars |
 | Картинки | Coil 3 (локальные URI); удалённые — Base64 → Bitmap |
 
 ### Конфигурация API
 
-`BuildConfig.API_URL` из `local.properties` (`API_URL`), иначе `http://10.0.2.2:8080`.  
+`BuildConfig.API_URL` из env `API_BASE_URL`, иначе `local.properties` (`API_URL`), иначе `http://10.0.2.2:8080`.  
 Cleartext разрешён для `10.0.2.2` (`network_security_config.xml`).
+
+CI (`.github/workflows/release.yml` на push в `master`) подставляет `API_BASE_URL` из секрета `DEPLOY_API_URL`.
 
 ## Архитектура
 
@@ -37,15 +39,16 @@ ProductsApp (@HiltAndroidApp)
   └─ preload token → SessionTokenHolder
 MainActivity (@AndroidEntryPoint)
   └─ AppNavGraph (NavHost)
+         ├─ AppUpdateHost / AppUpdateViewModel (проверка обновления и на login)
          ├─ SessionViewModel (bootstrap, logout, 401 → login)
          ├─ Login / Register → AuthViewModel
          └─ Catalog → CatalogViewModel + form/members VMs
 ```
 
 - **MVVM:** `@HiltViewModel` + `StateFlow` / `SharedFlow`.
-- **DI:** Hilt modules `NetworkModule`, `DataStoreModule`.
-- **Репозитории:** `AuthRepository`, `CategoryRepository`.
-- **Сеть:** Retrofit/OkHttp через Hilt (без object-синглтона).
+- **DI:** Hilt modules `NetworkModule`, `DataStoreModule`, `AppUpdateModule`.
+- **Репозитории:** `AuthRepository`, `CategoryRepository`, `AppUpdateRepository`.
+- **Сеть:** Retrofit/OkHttp через Hilt (без object-синглтона); отдельный OkHttp без `AuthInterceptor` для `/app/*`.
 - **Персистентность сессии:** DataStore (`session_prefs` / ключ `session_token`) + in-memory `SessionTokenHolder`.
 
 ## Структура пакетов
@@ -57,12 +60,12 @@ lofod.products
 ├── di/                 NetworkModule, DataStoreModule
 ├── domain/             UserSession
 ├── data/
-│   ├── local/          SessionDataStore, SessionTokenHolder
-│   ├── remote/         AuthApi, CategoryApi, AuthInterceptor, SessionExpiredNotifier
+│   ├── local/          SessionDataStore, SessionTokenHolder, AppUpdateDataStore
+│   ├── remote/         AuthApi, CategoryApi, AppUpdateApi, AuthInterceptor, SessionExpiredNotifier
 │   │   ├── model/      PriceLevel, QualityLevel, CategoryRole
 │   │   ├── request/    AuthCredentialsRequest, CreateCategory/Card, InviteMember
-│   │   └── response/   Category, Card, Member, UserSummary, Image*
-│   └── repository/     AuthRepository, CategoryRepository
+│   │   └── response/   Category, Card, Member, UserSummary, Image*, AppReleaseDto
+│   └── repository/     AuthRepository, CategoryRepository, AppUpdateRepository
 └── ui/
     ├── navigation/     Routes, AppNavGraph
     ├── session/        SessionViewModel
@@ -71,6 +74,7 @@ lofod.products
     ├── category/       CategoryFormScreen, CategoryFormViewModel
     ├── card/           CardFormScreen, CardFormViewModel
     ├── members/        MembersScreen, MembersViewModel
+    ├── update/         AppUpdateHost, AppUpdateViewModel, ApkInstaller
     ├── common/         ErrorMapper, ButtonProgressIndicator, RatingBar, CategoryIcon / RemoteImage
     └── theme/
 ```
@@ -131,7 +135,8 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 
 - Base URL: `BuildConfig.API_URL`
 - Converters: Scalars, затем Gson (`yyyy-MM-dd'T'HH:mm:ss.SSS`)
-- OkHttp: `AuthInterceptor`, timeout 30s, retry on failure; BODY logging только в `DEBUG`
+- OkHttp (основной): `AuthInterceptor`, timeout 30s, retry on failure; BODY logging только в `DEBUG`
+- OkHttp обновлений (`@AppUpdateNetwork`): без auth, read/write 60s, без call timeout; HEADERS logging в `DEBUG`
 
 ### AuthApi
 
@@ -164,6 +169,15 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 | `inviteMember` | POST | `category/{id}/members` | |
 | `removeMember` | DELETE | `category/{id}/members/{userId}` | |
 
+### AppUpdateApi (без сессии)
+
+| Метод | HTTP | Path |
+|-------|------|------|
+| `getLatestRelease` | GET | `app/latest` |
+| `downloadApk` | GET streaming | `app/download` (или `downloadPath` из latest) |
+
+DTO: `AppReleaseDto(versionCode, versionName, releasedAt, downloadPath)`.
+
 ### DTO / enums (клиент)
 
 - `CategoryResponse`: name, categoryId, parentId, counts, nested subcategories, imageId, **role**, **customFields**, **customFieldArchive**
@@ -173,6 +187,7 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 - `ImageResponse` / `ImageIdResponse`
 - `AuthCredentialsRequest(username, password)`
 - `InviteMemberRequest(username)`
+- `AppReleaseDto(versionCode, versionName, releasedAt, downloadPath)`
 
 ```kotlin
 enum class PriceLevel { LOW_PRICE, MEDIUM_PRICE, HIGH_PRICE }
@@ -216,7 +231,26 @@ enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 
 OWNER открывает «Участники» → list / invite по username / remove.
 
+### Обновление приложения
+
+1. `AppUpdateHost` над NavHost проверяет `GET /app/latest` один раз за процесс (и на экране логина).
+2. Если `versionCode` сервера больше `BuildConfig.VERSION_CODE` и пользователь не откладывал эту версию — диалог «Обновить / Позже».
+3. «Позже» пишет `versionCode` в DataStore (`app_update`); пункт «Обновить приложение» остаётся в drawer, пока релиз новее установленного.
+4. Скачивание стримом в `cacheDir/app_updates/`, затем FileProvider → системный установщик. Нужно разрешение «установка неизвестных приложений».
+
+## CI / релиз
+
+`.github/workflows/release.yml` (push в `master` или `workflow_dispatch`):
+
+1. JDK 21 + Android SDK; decode keystore из `SIGNING_KEYSTORE_BASE64`.
+2. `assembleRelease` с `-PversionCode=${{ github.run_number }}` `-PversionName=1.0.${{ github.run_number }}`; `API_BASE_URL` = `DEPLOY_API_URL`.
+3. `POST $DEPLOY_API_URL/app/releases` с `X-Deploy-Token` и multipart APK.
+4. Artifact `products-release-<run_number>`.
+
+Секреты репозитория Android: `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`, `DEPLOY_API_URL`, `DEPLOY_TOKEN`.
+
 ## Permissions
 
 - `INTERNET`
+- `REQUEST_INSTALL_PACKAGES` (in-app install APK)
 - Чтение медиа: `READ_EXTERNAL_STORAGE` (≤32), `READ_MEDIA_IMAGES` / `READ_MEDIA_VISUAL_USER_SELECTED` (≥33)

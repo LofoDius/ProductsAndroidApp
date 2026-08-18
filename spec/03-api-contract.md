@@ -13,7 +13,7 @@ Base URL клиента по умолчанию: `http://10.0.2.2:8080` (эму�
 | Дальше | Клиент шлёт `Authorization: Bearer <sessionId>` (на сервере `Bearer ` опционален) |
 | Текущий пользователь | `GET /auth/me` |
 | Logout | `DELETE /auth/logout` |
-| Публичные | только `/auth/register`, `/auth/login` (+ OPTIONS) |
+| Публичные | `/auth/register`, `/auth/login` (+ OPTIONS); `GET /app/latest`, `GET /app/download`; `POST /app/releases` (токен деплоя, не сессия) |
 | Каталог | **все** category/card/image/members/search routes требуют сессию |
 
 Shared password и `PUT /password` **удалены**.
@@ -67,6 +67,17 @@ Shared password и `PUT /password` **удалены**.
 | DELETE | `/category/{id}/members/{userId}` | session + owner | — | 200 empty |
 
 ACL: invite/remove правят `memberIds` **корня** дерева; list не включает владельца. Роли: см. [02-products-api.md](./02-products-api.md).
+
+### App releases
+
+| Method | Path | Auth | Request | Success |
+|--------|------|------|---------|---------|
+| GET | `/app/latest` | public | — | 200 `AppReleaseResponse`; 404 если релиза нет |
+| GET | `/app/download` | public | — | 200 APK (`application/vnd.android.package-archive`); 404 если релиза нет |
+| POST | `/app/releases` | `X-Deploy-Token` | multipart: `file`, `versionCode`, `versionName` | 201 `AppReleaseResponse` |
+
+`AppReleaseResponse(versionCode, versionName, releasedAt, downloadPath)` — `downloadPath` всегда `/app/download`.  
+Неверный/пустой deploy token → 401; пустой/слишком большой файл, невалидный `versionCode`/`versionName` → 400.
 
 ## Request DTOs
 
@@ -140,6 +151,7 @@ CardResponse(
 MemberResponse(userId: String, username: String)
 ImageIdResponse(imageId: String)
 ImageResponse(image: String)  // Base64
+AppReleaseResponse(versionCode: Int, versionName: String, releasedAt: String, downloadPath: String)
 ```
 
 ## Enums
@@ -182,6 +194,8 @@ enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 | card/image upload+get | Да |
 | search | Да |
 | members list/invite/remove | Да (`MembersScreen`, owner) |
+| GET /app/latest + GET /app/download | Да (`AppUpdateHost`, без сессии) |
+| POST /app/releases | Нет (CI / curl с deploy token) |
 
 ## Ошибки
 

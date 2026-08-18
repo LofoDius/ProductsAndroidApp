@@ -116,6 +116,7 @@ TTL приложения: `app.session.ttl-days` (default 30) при созда�
 | `CategoryRole` | `OWNER` \| `MEMBER` |
 | `UserPrincipal` | Principal в SecurityContext после filter |
 | `LoginResult` | user + sessionToken внутри AuthService |
+| `AppReleaseResponse` | metadata latest APK (`versionCode`, `versionName`, `releasedAt`, `downloadPath`) |
 
 ## Enums
 
@@ -157,6 +158,7 @@ ImageRepository : MongoRepository<Image, String>
 | `PriceLevel` / `QualityLevel` / `CustomFieldType` | Те же enum-имена (+ русские label в UI где нужно) |
 | `CategoryRole` | OWNER / MEMBER |
 | `SessionDataStore` + `SessionTokenHolder` | Session id |
+| `AppReleaseDto` | Latest APK metadata (`GET /app/latest`) |
 
 ## Инварианты и следствия
 
@@ -167,3 +169,4 @@ ImageRepository : MongoRepository<Image, String>
 5. **Сессия** привязана к userId и имеет expiresAt (приложение + Mongo TTL).
 6. **Пароли** только per-user BCrypt; shared Password-документа нет.
 7. **Custom fields:** активных ≤10; удаление из схемы → archive, не purge значений на cards; restore по fieldId или title+type; при save card merge orphans.
+8. **APK-релиз** не в Mongo: каталог `app.releases.path` (`latest.apk` + `latest.json`).
