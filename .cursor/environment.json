@@ -1,0 +1,4 @@
+{
+  "name": "Products Android app",
+  "install": "bash .cursor/install.sh"
+}
