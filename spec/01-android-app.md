@@ -61,7 +61,7 @@ lofod.products
 ├── domain/             UserSession
 ├── data/
 │   ├── local/          SessionDataStore, SessionTokenHolder, AppUpdateDataStore
-│   ├── remote/         AuthApi, CategoryApi, AppUpdateApi, AuthInterceptor, SessionExpiredNotifier
+│   ├── remote/         AuthApi, CategoryApi, AppUpdateApi, AuthInterceptor, Ipv4FirstDns, SessionExpiredNotifier
 │   │   ├── model/      PriceLevel, QualityLevel, CategoryRole
 │   │   ├── request/    AuthCredentialsRequest, CreateCategory/Card, InviteMember
 │   │   └── response/   Category, Card, Member, UserSummary, Image*, AppReleaseDto
@@ -135,8 +135,9 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 
 - Base URL: `BuildConfig.API_URL`
 - Converters: Scalars, затем Gson (`yyyy-MM-dd'T'HH:mm:ss.SSS`)
-- OkHttp (основной): `AuthInterceptor`, timeout 30s, retry on failure; BODY logging только в `DEBUG`
-- OkHttp обновлений (`@AppUpdateNetwork`): без auth, read/write 60s, без call timeout; HEADERS logging в `DEBUG`
+- OkHttp (основной): `AuthInterceptor`, connect 10s / read 30s, retry on failure; BODY logging только в `DEBUG`
+- OkHttp обновлений (`@AppUpdateNetwork`): без auth, connect 10s, read/write 60s, без call timeout; HEADERS logging в `DEBUG`
+- DNS: `Ipv4FirstDns` (IPv4 раньше IPv6). OkHttp 4 ходит по адресам последовательно и на dual-stack Wi-Fi может зависнуть на мёртвом IPv6 до connect-timeout; браузер это скрывает Happy Eyeballs.
 
 ### AuthApi
 

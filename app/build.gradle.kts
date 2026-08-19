@@ -110,6 +110,7 @@ dependencies {
     // retrofit2
     implementation(libs.retrofit)
     implementation(libs.converter.gson)
+    implementation(libs.okhttp)
     implementation(libs.logging.interceptor)
     implementation(libs.retrofit2.converter.scalars)
 

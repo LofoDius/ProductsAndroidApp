@@ -10,6 +10,8 @@ import lofod.products.data.remote.AppUpdateApi
 import lofod.products.data.remote.AuthApi
 import lofod.products.data.remote.AuthInterceptor
 import lofod.products.data.remote.CategoryApi
+import lofod.products.data.remote.Ipv4FirstDns
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -24,11 +26,16 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideDns(): Dns = Ipv4FirstDns()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor, dns: Dns): OkHttpClient {
         val builder = OkHttpClient.Builder()
+            .dns(dns)
             .addInterceptor(authInterceptor)
             .readTimeout(30, TimeUnit.SECONDS)
-            .connectTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
 
         if (BuildConfig.DEBUG) {
@@ -48,9 +55,10 @@ object NetworkModule {
     @Provides
     @Singleton
     @AppUpdateNetwork
-    fun provideAppUpdateOkHttpClient(): OkHttpClient {
+    fun provideAppUpdateOkHttpClient(dns: Dns): OkHttpClient {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
+            .dns(dns)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .callTimeout(0, TimeUnit.MILLISECONDS)
