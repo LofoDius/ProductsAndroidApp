@@ -88,7 +88,7 @@ lofod.productsapi
 | Операция | Поведение |
 |----------|-----------|
 | Register | Пустые поля → 400; duplicate username → 409; BCrypt hash; `201` + `UserResponse` (сессии нет) |
-| Login | Неверные credentials → 401; создаёт Session с `expiresAt = now + ttlDays`; `201` + body user + header `Authorization: <sessionId hex>` |
+| Login | Неверные credentials → 401, сообщение «Неверный логин или пароль»; создаёт Session с `expiresAt = now + ttlDays`; `201` + body user + header `Authorization: <sessionId hex>` |
 | Logout | Удаляет сессию, очищает SecurityContext |
 | Me | Текущий `UserPrincipal` → `UserResponse` |
 | Validate | Сессия отсутствует/истекла → удаление + 401 |

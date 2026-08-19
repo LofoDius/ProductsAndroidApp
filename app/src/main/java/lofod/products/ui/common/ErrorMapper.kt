@@ -17,8 +17,8 @@ object ErrorMapper {
         } catch (_: Exception) {
             ""
         }
-        parseApiMessage(bodyText)?.let { return it }
-        if (bodyText.isNotEmpty()) return bodyText
+        parseApiMessage(bodyText)?.let { return localizeAuthWording(it) }
+        if (bodyText.isNotEmpty()) return localizeAuthWording(bodyText)
         return when (exception.code()) {
             401 -> "Требуется авторизация"
             403 -> "Недостаточно прав"
@@ -26,6 +26,12 @@ object ErrorMapper {
             409 -> "Конфликт данных"
             else -> "Ошибка сервера: ${exception.code()}"
         }
+    }
+
+    private fun localizeAuthWording(message: String): String = when (message) {
+        "Неверный username или password" -> "Неверный логин или пароль"
+        "username и password обязательны" -> "логин и пароль обязательны"
+        else -> message
     }
 
     private fun parseApiMessage(bodyText: String): String? {
