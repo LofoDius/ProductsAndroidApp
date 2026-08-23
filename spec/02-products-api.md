@@ -15,9 +15,10 @@
 | Security | Spring Security + кастомный session filter |
 | Passwords | BCrypt (`BCryptPasswordEncoder`) |
 | Images | Thumbnailator 0.4.20 |
+| Search | Apache Lucene (in-process; не Postgres, не Elasticsearch) |
 | Packaging | Fat JAR; multi-stage Docker + `docker compose` (see below) |
 
-**Не используется:** JPA, SQL, Flyway/Liquibase, Bean Validation, JWT, OpenAPI/Swagger, shared Password-документ, LiteCategory.
+**Не используется:** JPA, SQL, Flyway/Liquibase, Bean Validation, JWT, OpenAPI/Swagger, shared Password-документ, LiteCategory. Поиск не выносится в Postgres / Elasticsearch.
 
 ## Конфигурация
 
@@ -56,14 +57,16 @@ One-command stack via `docker compose` in the API repo:
 Controller → Service → MongoRepository → MongoDB
                 ↕
              Mapper (domain → response DTO)
+                ↕
+             SearchService → in-process Lucene
 ```
 
 ```
 lofod.productsapi
 ├── ProductsApiApplication.kt
-├── config/           AppReleaseProperties
+├── config/           AppReleaseProperties, SearchProperties
 ├── controller/       AuthController, CategoryController, AppReleaseController
-├── service/          Auth, CategoryAccess, Category, Card, Image, Member, AppRelease + mapper/
+├── service/          Auth, CategoryAccess, Category, Card, Search, Image, Member, AppRelease + mapper/
 ├── repository/       User, Session, Category, Image
 ├── model/            entities, enums, request/, response/
 ├── security/         SecurityConfig, SessionRequestFilter, PasswordEncoderConfig, UserPrincipal
@@ -115,7 +118,8 @@ TTL: `app.session.ttl-days` (default 30). Mongo TTL index `session_expires_at_tt
 | Service | Ответственность |
 |---------|-----------------|
 | `CategoryService` | дерево, create/update/delete категории (+ subtree), ACL; reconcile custom fields |
-| `CardService` | CRUD карточек + search (фильтр по доступу); `rating` 0..10 иначе 400; merge `customFieldValues` |
+| `CardService` | CRUD карточек; `rating` 0..10 иначе 400; merge `customFieldValues` |
+| `SearchService` | Lucene-индекс, `GET /search`, ACL, proximity-сортировка карточек |
 | `ImageService` | upload (Thumbnailator ≤1024 px width, JPEG `outputFormat` + quality по размеру файла), get, deleteIfPresent |
 | `MemberService` | invite по username / remove / list (без владельца в списке) |
 | `AppReleaseService` | latest metadata/APK на диске; publish по `X-Deploy-Token` (constant-time compare) |
@@ -132,6 +136,29 @@ Update category: `parentId == null` или `imageId == null` в запросе �
 - Поля, убранные из активного списка, уходят в архив; значения на карточках **не удаляются**.
 - На карточке: `customFieldValues` (`fieldId` + string `value`); при save incoming валидируется только против активной схемы, orphan-значения (fieldId вне схемы) **сохраняются** (merge).
 - `CategoryResponse` отдаёт и `customFields`, и `customFieldArchive`.
+
+### Поиск (Lucene)
+
+MongoDB остаётся источником истины. Индекс — in-process Apache Lucene внутри products-api.
+
+- Analyzer: `RussianAnalyzer` (морфология) + char/token n-grams, минимум 3 символа (уменьшительные).
+- Поля и boosts (по убыванию): название карточки > название категории > описание карточки > значения custom fields.
+- Полная пересборка индекса при старте; инкрементальные обновления на CRUD категорий и карточек.
+- ACL: в выдачу попадают только документы из доступных деревьев (`rootCategoryId` / `CategoryAccessService`).
+
+Поиск **глобальный**: открытая категория C не фильтрует выдачу, а только задаёт ярусы сортировки карточек (затем score Lucene). Для категорий proximity нет — только score, не больше 3 хитов.
+
+| Ярус | Карточки относительно открытой категории C |
+|------|--------------------------------------------|
+| 1 | В самой C |
+| 2 | Потомки C (любая глубина) |
+| 3 | Только в родителе C |
+| 4 | Поддеревья сиблингов: сиблинги C (тот же parent) и все их потомки |
+| 5 | Остальное (дяди, другие корни, предки выше) |
+
+Если C — корень: ярус 3 пуст; ярус 4 = прочие **доступные** корни и все их потомки; ярус 5 пуст.
+
+Пустой `q` → пустые списки категорий и карточек. `categoryId` отсутствует, пустой или `"-1"` → без proximity (все карточки в одном ярусе, только score). Неизвестный или недоступный `categoryId` обрабатывается так же, как omitted — не 404.
 
 ## Security
 
@@ -175,3 +202,4 @@ data class ErrorResponse(val code: String, val message: String)
 4. Create card / update card возвращают **весь** список карточек категории.
 5. Custom field values на cards не чистятся при archive поля; клиент показывает только активную схему.
 6. APK-релиз хранится как файлы `latest.apk` + `latest.json` в `app.releases.path` (не Mongo); публикация перезаписывает предыдущий релиз.
+7. Lucene-индекс пересобирается при старте процесса; источник истины — Mongo.

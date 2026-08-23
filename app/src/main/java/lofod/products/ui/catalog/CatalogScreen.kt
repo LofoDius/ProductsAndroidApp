@@ -292,9 +292,42 @@ private fun CatalogMainContent(
                         modifier = Modifier.align(Alignment.Center),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else if (state.isSearchMode) {
+                    val searchCategories = state.searchCategories.take(3)
+                    if (searchCategories.isEmpty() && state.cards.isEmpty()) {
+                        Text(
+                            text = "Ничего не найдено",
+                            modifier = Modifier.align(Alignment.Center),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(searchCategories, key = { "cat-${it.categoryId}" }) { hit ->
+                                SearchCategoryListItem(
+                                    hit = hit,
+                                    loadCategoryImage = loadCategoryImage,
+                                    onClick = { catalogViewModel.selectSearchCategory(hit) }
+                                )
+                            }
+                            items(state.cards, key = { "card-${it.cardId}" }) { card ->
+                                CardListItem(
+                                    card = card,
+                                    expanded = state.expandedCardId == card.cardId,
+                                    canEdit = true,
+                                    loadImage = { imageId ->
+                                        loadCardImageBitmap(categoryRepository, imageId)
+                                    },
+                                    onToggle = { catalogViewModel.toggleCardExpanded(card.cardId) },
+                                    onEdit = { onEditCard(card) },
+                                    onDelete = { catalogViewModel.requestDeleteCard(card) },
+                                    categoryPath = categoryBreadcrumb(card.categoryId, root)
+                                )
+                            }
+                        }
+                    }
                 } else if (state.cards.isEmpty()) {
                     Text(
-                        text = if (state.isSearchMode) "Ничего не найдено" else "Пока нет оценок",
+                        text = "Пока нет оценок",
                         modifier = Modifier.align(Alignment.Center),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -310,7 +343,8 @@ private fun CatalogMainContent(
                                 },
                                 onToggle = { catalogViewModel.toggleCardExpanded(card.cardId) },
                                 onEdit = { onEditCard(card) },
-                                onDelete = { catalogViewModel.requestDeleteCard(card) }
+                                onDelete = { catalogViewModel.requestDeleteCard(card) },
+                                categoryPath = null
                             )
                         }
                     }

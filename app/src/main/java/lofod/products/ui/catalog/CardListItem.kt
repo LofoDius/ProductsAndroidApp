@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import lofod.products.data.remote.response.CardResponse
 import lofod.products.ui.common.RatingBar
@@ -41,7 +42,8 @@ fun CardListItem(
     loadImage: suspend (String) -> ImageBitmap?,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    categoryPath: String? = null
 ) {
     var imageBitmap by remember(card.imageId) { mutableStateOf<ImageBitmap?>(null) }
 
@@ -98,6 +100,17 @@ fun CardListItem(
                     null
                 }
             )
+
+            if (!categoryPath.isNullOrBlank()) {
+                Text(
+                    text = categoryPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                )
+            }
 
             AnimatedVisibility(visible = expanded) {
                 Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp, bottom = 12.dp)) {

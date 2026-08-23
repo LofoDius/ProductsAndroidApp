@@ -50,13 +50,26 @@ Shared password и `PUT /password` **удалены**.
 | PUT | `/category/{categoryId}/card/{cardId}` | session + access | `UpdateCardRequest` | `List<CardResponse>` |
 | DELETE | `/category/{categoryId}/card/{cardId}` | session + access | — | 200 empty |
 
-### Card images & search
+### Card images
 
 | Method | Path | Auth | Request | Success |
 |--------|------|------|---------|---------|
 | POST | `/card/image` | session | Multipart part `image` | `ImageIdResponse` |
 | GET | `/card/image/{id}` | session | — | `ImageResponse` |
-| GET | `/cards/search/{query}` | session + ACL filter | path `query` | `List<CardResponse>` |
+
+### Search
+
+| Method | Path | Auth | Request | Success |
+|--------|------|------|---------|---------|
+| GET | `/search` | session + ACL | query `q`, optional `categoryId` | 200 `SearchResponse` |
+
+`GET /cards/search/{query}` **удалён**.
+
+Пустой / отсутствующий `q` → 200 с пустыми `categories` и `cards`.  
+`categoryId` отсутствует, пустой или `"-1"` → без proximity (карточки в одном ярусе, только Lucene score). Неизвестный или недоступный `categoryId` — то же, что omitted, не 404. Поиск глобальный: `categoryId` влияет только на сортировку карточек.
+
+`SearchResponse.categories` — **max 3**, порядок = Lucene score desc; proximity для категорий нет.  
+`SearchResponse.cards` — существующий `CardResponse` (включая `categoryId`); порядок: ярус proximity, затем Lucene score. Ярусы: см. [02-products-api.md](./02-products-api.md).
 
 ### Members
 
@@ -148,6 +161,19 @@ CardResponse(
   customFieldValues: List<CustomFieldValueDto> = emptyList(),
 )
 
+SearchResponse(
+  categories: List<CategorySearchHit>,  // max 3; score desc; без proximity
+  cards: List<CardResponse>,            // proximity, затем Lucene score
+)
+
+CategorySearchHit(
+  categoryId: String,
+  name: String,
+  parentId: String?,
+  imageId: String?,
+  role: CategoryRole,
+)
+
 MemberResponse(userId: String, username: String)
 ImageIdResponse(imageId: String)
 ImageResponse(image: String)  // Base64
@@ -192,7 +218,7 @@ enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 | GET single card | Да (`CardFormScreen` edit) |
 | card customFieldValues | Да (`CardFormScreen`, access) |
 | card/image upload+get | Да |
-| search | Да |
+| GET /search | Да (`CatalogScreen` top bar; без `categoryId` с корня «Все категории») |
 | members list/invite/remove | Да (`MembersScreen`, owner) |
 | GET /app/latest + GET /app/download | Да (`AppUpdateHost`, без сессии) |
 | POST /app/releases | Нет (CI / curl с deploy token) |

@@ -57,7 +57,7 @@ fun SearchableTopAppBar(
                     decorationBox = { inner ->
                         if (searchQuery.isEmpty()) {
                             Text(
-                                text = "Поиск оценок…",
+                                text = "Поиск…",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

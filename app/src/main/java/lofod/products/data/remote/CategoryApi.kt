@@ -8,6 +8,7 @@ import lofod.products.data.remote.response.CategoryResponse
 import lofod.products.data.remote.response.ImageIdResponse
 import lofod.products.data.remote.response.ImageResponse
 import lofod.products.data.remote.response.MemberResponse
+import lofod.products.data.remote.response.SearchResponse
 import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -18,6 +19,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface CategoryApi {
 
@@ -78,8 +80,11 @@ interface CategoryApi {
         @Path("cardId") cardId: String
     ): Response<Unit>
 
-    @GET("cards/search/{query}")
-    suspend fun search(@Path(value = "query", encoded = true) query: String): List<CardResponse>
+    @GET("search")
+    suspend fun search(
+        @Query("q") query: String,
+        @Query("categoryId") categoryId: String? = null
+    ): SearchResponse
 
     @GET("category/{id}/members")
     suspend fun listMembers(@Path("id") id: String): List<MemberResponse>

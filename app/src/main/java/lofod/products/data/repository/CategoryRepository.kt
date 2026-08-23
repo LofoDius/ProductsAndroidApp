@@ -1,6 +1,5 @@
 package lofod.products.data.repository
 
-import android.net.Uri
 import lofod.products.data.remote.CategoryApi
 import lofod.products.data.remote.bodyOrThrow
 import lofod.products.data.remote.ensureSuccess
@@ -11,6 +10,7 @@ import lofod.products.data.remote.response.CardResponse
 import lofod.products.data.remote.response.CategoryResponse
 import lofod.products.data.remote.response.ImageResponse
 import lofod.products.data.remote.response.MemberResponse
+import lofod.products.data.remote.response.SearchResponse
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -52,10 +52,8 @@ class CategoryRepository @Inject constructor(
         categoryApi.deleteCard(categoryId, cardId).ensureSuccess()
     }
 
-    suspend fun search(query: String): List<CardResponse> {
-        val encoded = Uri.encode(query.trim())
-        return categoryApi.search(encoded)
-    }
+    suspend fun search(query: String, categoryId: String?): SearchResponse =
+        categoryApi.search(query.trim(), categoryId)
 
     suspend fun uploadCategoryImage(bytes: ByteArray): String {
         val part = imagePart(bytes)

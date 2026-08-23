@@ -19,12 +19,12 @@
 | Компонент | Стек | Роль |
 |-----------|------|------|
 | Android app | Kotlin 2.0, Compose, Hilt, Navigation, DataStore, Retrofit | UI, сессия пользователя, ACL-aware каталог, in-app обновление APK |
-| products-api | Spring Boot 3.3.5, Kotlin 1.9, MongoDB | Auth, ACL, каталог, изображения, хостинг APK-релизов |
+| products-api | Spring Boot 3.3.5, Kotlin 1.9, MongoDB, Apache Lucene | Auth, ACL, каталог, поиск, изображения, хостинг APK-релизов |
 
 ## Архитектурный стиль
 
 - **Клиент:** MVVM (ViewModel + StateFlow) → Repository → Retrofit; DI через Hilt; токен в DataStore.
-- **Сервер:** Controller → Service → MongoRepository; карточки встроены в документ категории; ACL на корне дерева.
+- **Сервер:** Controller → Service → MongoRepository; карточки встроены в документ категории; ACL на корне дерева. MongoDB — источник истины; поиск — in-process Apache Lucene (не Postgres, не Elasticsearch).
 - **Связь:** HTTP REST; почти все эндпоинты требуют session-токен в `Authorization`. Публичны: register/login и проверка/скачивание/публикация APK (`/app/*`; публикация — по `X-Deploy-Token`).
 
 ## Ключевые пользовательские потоки
@@ -34,7 +34,7 @@
 3. **Каталог:** drawer с деревьями, к которым у пользователя есть доступ (owner или member); выбор категории → карточки.
 4. **CRUD:** владелец управляет категориями и участниками; владелец и участник — карточками в доступном дереве.
 5. **Приглашение:** владелец добавляет участника по username (`POST /category/{id}/members`).
-6. **Изображения / поиск:** multipart upload → `imageId`; получение Base64; поиск карточек в доступных категориях.
+6. **Изображения / поиск:** multipart upload → `imageId`; получение Base64; `GET /search` — категории (≤3) и карточки по ACL; сортировка карточек с учётом открытой категории (proximity), затем score Lucene.
 7. **Обновление приложения:** при старте клиент спрашивает `GET /app/latest` (без сессии); если `versionCode` новее установленного — диалог, скачивание APK и установка. CI Android-репозитория собирает signed APK и публикует его на API (`POST /app/releases`).
 
 ## Auth и ACL (кратко)

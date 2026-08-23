@@ -3,6 +3,8 @@ package lofod.products.ui.catalog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,10 +12,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lofod.products.data.remote.response.CardResponse
 import lofod.products.data.remote.response.CategoryResponse
+import lofod.products.data.remote.response.CategorySearchHit
 import lofod.products.data.repository.CategoryRepository
 import lofod.products.ui.common.ErrorMapper
 import lofod.products.ui.common.findCategoryById
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 data class CatalogUiState(
     val isBootLoading: Boolean = true,
@@ -27,6 +31,7 @@ data class CatalogUiState(
     val searchOpen: Boolean = false,
     val searchQuery: String = "",
     val isSearchMode: Boolean = false,
+    val searchCategories: List<CategorySearchHit> = emptyList(),
     val expandedCardId: String? = null,
     val categoryPendingDelete: CategoryResponse? = null,
     val cardPendingDelete: CardResponse? = null
@@ -39,6 +44,7 @@ class CatalogViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(CatalogUiState())
     val state: StateFlow<CatalogUiState> = _state.asStateFlow()
+    private var searchJob: Job? = null
 
     init {
         loadTree(isBoot = true)
@@ -54,6 +60,7 @@ class CatalogViewModel @Inject constructor(
     }
 
     fun selectCategory(category: CategoryResponse) {
+        searchJob?.cancel()
         viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -61,6 +68,7 @@ class CatalogViewModel @Inject constructor(
                     isSearchMode = false,
                     searchOpen = false,
                     searchQuery = "",
+                    searchCategories = emptyList(),
                     expandedCardId = null,
                     actionError = null
                 )
@@ -95,17 +103,19 @@ class CatalogViewModel @Inject constructor(
     }
 
     fun closeSearch() {
+        searchJob?.cancel()
         val current = _state.value.currentCategory
         _state.update {
             it.copy(
                 searchOpen = false,
                 searchQuery = "",
                 isSearchMode = false,
+                searchCategories = emptyList(),
                 actionError = null
             )
         }
         if (current == null || current.isSyntheticRoot()) {
-            _state.update { it.copy(cards = emptyList()) }
+            _state.update { it.copy(cards = emptyList(), isCardsLoading = false) }
         } else {
             loadCards(current.categoryId)
         }
@@ -113,25 +123,72 @@ class CatalogViewModel @Inject constructor(
 
     fun onSearchQueryChange(query: String) {
         _state.update { it.copy(searchQuery = query, actionError = null) }
+        searchJob?.cancel()
         if (query.isBlank()) {
-            _state.update { it.copy(isSearchMode = false, cards = emptyList()) }
+            _state.update {
+                it.copy(
+                    isSearchMode = false,
+                    searchCategories = emptyList(),
+                    cards = emptyList(),
+                    isCardsLoading = false
+                )
+            }
             val current = _state.value.currentCategory
             if (current != null && !current.isSyntheticRoot()) {
                 loadCards(current.categoryId)
             }
             return
         }
-        viewModelScope.launch {
-            _state.update { it.copy(isCardsLoading = true, isSearchMode = true) }
+        _state.update { it.copy(isSearchMode = true, isCardsLoading = true) }
+        searchJob = viewModelScope.launch {
+            delay(300)
             try {
-                val results = categoryRepository.search(query)
+                val current = _state.value.currentCategory
+                val categoryId = current?.takeUnless { it.isSyntheticRoot() }?.categoryId
+                val results = categoryRepository.search(query.trim(), categoryId)
                 _state.update {
-                    it.copy(cards = results, isCardsLoading = false, actionError = null)
+                    it.copy(
+                        searchCategories = results.categories,
+                        cards = results.cards,
+                        isCardsLoading = false,
+                        actionError = null
+                    )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
                         isCardsLoading = false,
+                        actionError = ErrorMapper.toMessage(e)
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectSearchCategory(hit: CategorySearchHit) {
+        val existing = findInLoadedTree(hit.categoryId)
+        if (existing != null) {
+            selectCategory(existing)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _state.update { it.copy(isRefreshing = true, actionError = null) }
+                val children = categoryRepository.getCategories()
+                val root = syntheticRoot(children)
+                val found = findCategoryById(hit.categoryId, root.subcategories)
+                _state.update { it.copy(root = root, isRefreshing = false) }
+                if (found != null) {
+                    selectCategory(found)
+                } else {
+                    _state.update { it.copy(actionError = "Категория не найдена") }
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isRefreshing = false,
                         actionError = ErrorMapper.toMessage(e)
                     )
                 }
@@ -291,6 +348,11 @@ class CatalogViewModel @Inject constructor(
                 // Keep existing tree; card mutation already succeeded.
             }
         }
+    }
+
+    private fun findInLoadedTree(categoryId: String): CategoryResponse? {
+        val root = _state.value.root ?: return null
+        return findCategoryById(categoryId, root.subcategories)
     }
 
     private fun loadCards(categoryId: String) {

@@ -64,13 +64,13 @@ lofod.products
 │   ├── remote/         AuthApi, CategoryApi, AppUpdateApi, AuthInterceptor, Ipv4FirstDns, SessionExpiredNotifier
 │   │   ├── model/      PriceLevel, QualityLevel, CategoryRole
 │   │   ├── request/    AuthCredentialsRequest, CreateCategory/Card, InviteMember
-│   │   └── response/   Category, Card, Member, UserSummary, Image*, AppReleaseDto
+│   │   └── response/   Category, Card, Member, UserSummary, Image*, AppReleaseDto, SearchResponse, CategorySearchHit
 │   └── repository/     AuthRepository, CategoryRepository, AppUpdateRepository
 └── ui/
     ├── navigation/     Routes, AppNavGraph
     ├── session/        SessionViewModel
     ├── auth/           LoginScreen, RegisterScreen, AuthViewModel
-    ├── catalog/        CatalogScreen, CatalogViewModel, CatalogAcl, drawer, CardListItem
+    ├── catalog/        CatalogScreen, CatalogViewModel, CatalogAcl, drawer, CardListItem, SearchableTopAppBar
     ├── category/       CategoryFormScreen, CategoryFormViewModel
     ├── card/           CardFormScreen, CardFormViewModel
     ├── members/        MembersScreen, MembersViewModel
@@ -120,6 +120,7 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 Иконка категории (`imageId` → `getCategoryImage`, иначе placeholder Folder): в header/строках drawer и в title top bar (не для synthetic root / режима поиска).  
 Пустой каталог (синтетический корень без top-level категорий): в drawer одно сообщение «Нет категорий» вместо заголовка «Все категории» / «Выберите категорию» / «Нет подкатегорий»; пустая ветка внутри существующей категории по-прежнему «Нет подкатегорий».  
 В списке оценок (`CardListItem`) блок изображения показывается только при успешно загруженном `imageId`; без картинки и при ошибке загрузки placeholder не рисуется.  
+Только в режиме поиска: внизу карточки — breadcrumb от корня дерева до категории карточки, через ` ● ` (например `Одежда ● Шапки ● Зима`); путь считается на клиенте из загруженного дерева. В обычном списке карточек категории путь не показывается.  
 Рейтинг карточки: API `rating` Int 0..10; UI — 5 звёзд (половина = +1). В `CardListItem` — read-only `RatingBar`; в `CardFormScreen` — интерактивный (tap / scrub). Default при создании: `0`.
 
 ### Пользовательские поля (custom fields)
@@ -165,7 +166,7 @@ Material Design 3: `NavigationDrawerItem` / `ListItem` в drawer, `TopAppBar` + 
 | `deleteCard` | DELETE | `category/{id}/card/{cardId}` | |
 | `uploadCardImage` | POST multipart | `card/image` | используется формой карточки |
 | `getCardImage` | GET | `card/image/{id}` | |
-| `search` | GET | `cards/search/{query}` | |
+| `search` | GET | `search` | query `q`, optional `categoryId` |
 | `listMembers` | GET | `category/{id}/members` | |
 | `inviteMember` | POST | `category/{id}/members` | |
 | `removeMember` | DELETE | `category/{id}/members/{userId}` | |
@@ -183,6 +184,8 @@ DTO: `AppReleaseDto(versionCode, versionName, releasedAt, downloadPath)`.
 
 - `CategoryResponse`: name, categoryId, parentId, counts, nested subcategories, imageId, **role**, **customFields**, **customFieldArchive**
 - `CardResponse`: cardId, categoryId, name, imageId, priceLevel, qualityLevel, **rating** (0..10, default 0), description, **customFieldValues**
+- `SearchResponse`: `categories` (≤3 `CategorySearchHit`), `cards` (`List<CardResponse>`)
+- `CategorySearchHit`: categoryId, name, parentId, imageId, role
 - `CustomFieldDefinitionDto(fieldId?, title, type)`, `CustomFieldValueDto(fieldId, value?)`
 - `MemberResponse` / `UserSummaryResponse`: userId, username
 - `ImageResponse` / `ImageIdResponse`
@@ -224,9 +227,17 @@ enum class CustomFieldType { TEXT, NUMBER, BOOLEAN, DATE, COUNTER }
 - Создание/редактирование категории — `CategoryFormScreen` (`category/create/{parentId}`, `category/edit/{categoryId}`); родитель — только OWNER-деревья; корневой parent = `null`; schema custom fields — OWNER.
 - Карточки: FAB / edit → `CardFormScreen` (`card/create/...`, `card/edit/...`); defaults при create — `LOW_PRICE` / `LOW_QUALITY` / `rating = 0`; значения custom fields по активной схеме.
 - Форма оценки: `ExposedDropdownMenu` для `priceLevel` / `qualityLevel` и интерактивный рейтинг звёздами (`RatingBar`); список показывает рейтинг read-only.
-- Поиск через top bar → тот же список карточек.
 - Удаление категории/карточки — confirm `AlertDialog` на каталоге.
 - Участники — `MembersScreen` (`category/{categoryId}/members`).
+
+### Поиск
+
+Тот же top bar каталога (`SearchableTopAppBar`); placeholder «Поиск…»; debounce ~300 мс.
+
+- Запрос: `CategoryApi.search` → `GET search` с `q` и опциональным `categoryId`. С синтетического корня «Все категории» (`categoryId = "-1"`) параметр `categoryId` **не отправляется**.
+- Результаты: категории сверху (≤3 `CategorySearchHit`), затем карточки (`CardResponse`).
+- Тап по категории → переход в неё (`selectCategory`).
+- Breadcrumb пути карточки — только в режиме поиска (см. `CardListItem` выше).
 
 ### Участники
 
