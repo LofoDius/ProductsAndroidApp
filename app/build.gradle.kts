@@ -18,8 +18,8 @@ fun signingProperty(name: String): String? =
     System.getenv(name) ?: localProperties.getProperty(name)
 
 val signingStoreFile = signingProperty("SIGNING_STORE_FILE")?.takeIf { it.isNotBlank() }
-val releaseVersionCode = providers.gradleProperty("versionCode").orElse("1").get().toInt()
-val releaseVersionName = providers.gradleProperty("versionName").orElse("1.0.1").get()
+val releaseVersionCode = providers.gradleProperty("versionCode").orElse("4").get().toInt()
+val releaseVersionName = providers.gradleProperty("versionName").orElse("1.0.4").get()
 
 val apiUrl: String = System.getenv("API_BASE_URL")
     ?: localProperties.getProperty("API_URL")

@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import lofod.products.ui.common.CategoryIcon
+import lofod.products.ui.common.ProductsLogo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,8 +86,10 @@ fun SearchableTopAppBar(
                             size = 28.dp,
                             contentDescription = null
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                    } else {
+                        ProductsLogo(size = 28.dp)
                     }
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(text = title, style = MaterialTheme.typography.titleLarge)
                 }
             },

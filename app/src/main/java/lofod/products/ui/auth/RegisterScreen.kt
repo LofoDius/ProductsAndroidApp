@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lofod.products.ui.common.ButtonProgressIndicator
+import lofod.products.ui.common.ProductsBrand
 
 @Composable
 fun RegisterScreen(
@@ -66,6 +67,8 @@ fun RegisterScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            ProductsBrand()
+            Spacer(modifier = Modifier.height(16.dp))
             Text(text = "Регистрация", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(8.dp))
             Text(

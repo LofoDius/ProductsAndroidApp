@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lofod.products.ui.common.ButtonProgressIndicator
+import lofod.products.ui.common.ProductsBrand
 
 @Composable
 fun LoginScreen(
@@ -68,11 +69,7 @@ fun LoginScreen(
         ) {
             Text(text = "Вход", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Products",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            ProductsBrand()
             Spacer(modifier = Modifier.height(24.dp))
 
             OutlinedTextField(

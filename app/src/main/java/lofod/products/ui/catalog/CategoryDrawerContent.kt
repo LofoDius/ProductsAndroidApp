@@ -36,6 +36,7 @@ import lofod.products.R
 import lofod.products.data.remote.model.CategoryRole
 import lofod.products.data.remote.response.CategoryResponse
 import lofod.products.ui.common.CategoryIcon
+import lofod.products.ui.common.ProductsBrand
 
 @Composable
 fun CategoryDrawerContent(
@@ -61,6 +62,7 @@ fun CategoryDrawerContent(
             .verticalScroll(scroll)
     ) {
         Spacer(modifier = Modifier.height(12.dp))
+        ProductsBrand(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
         val isEmptyCatalog =
             currentCategory.isSyntheticRoot() && root.subcategories.isEmpty()
 
